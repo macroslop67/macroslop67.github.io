@@ -65,6 +65,7 @@ This file captures key product and architecture choices for MatricesBB.
 - In forum/thread post layout, reaction chips should be grouped alongside post action controls.
 - In forum/board mode, reaction chips should render in the body area below content; in tree mode they stay grouped with actions.
 - Composer supports attachments and poll creation.
+- Poll voting UI should present clear selectable-option states and a prominent vote action in both thread/forum and chat contexts, with mobile-friendly stacked actions.
 - Users can edit their own posts.
 - Moderation-capable users can remove posts.
 - Message deletion actions should require explicit user confirmation before redact calls.

@@ -1120,29 +1120,34 @@ function PostPoll({
   };
 
   return (
-    <section className="post-poll">
+    <section className="post-poll post-poll-voting">
       <h4>{poll.question}</h4>
-      <ul>
+      <ul className="post-poll-options">
         {poll.options.map((option) => (
-          <li key={`${post.eventId}-${option.id}`}>
+          <li
+            key={`${post.eventId}-${option.id}`}
+            className={`post-poll-option ${selectedOptionIds.includes(option.id) ? "post-poll-option-selected" : ""}`}
+          >
             <button
               type="button"
-              className={`reply-button ${selectedOptionIds.includes(option.id) ? "reaction-chip-active" : ""}`}
+              className={`reply-button post-poll-option-button ${selectedOptionIds.includes(option.id) ? "post-poll-option-button-selected" : ""}`}
               onClick={() => toggleOption(option.id)}
             >
               {option.label}
             </button>
-            <span className="inline-note">{t("count.vote", { count: option.voteCount })}</span>
+            <span className="inline-note post-poll-vote-count">
+              {t("count.vote", { count: option.voteCount })}
+            </span>
           </li>
         ))}
       </ul>
-      <div className="chat-message-actions">
-        <span className="inline-note">
+      <div className="chat-message-actions post-poll-actions">
+        <span className="inline-note post-poll-hint">
           {t("poll.maxSelections", { count: poll.maxSelections })}
         </span>
         <button
           type="button"
-          className="reply-button"
+          className="reply-button post-poll-submit"
           onClick={submitVote}
           disabled={busy || selectedOptionIds.length === 0}
         >
