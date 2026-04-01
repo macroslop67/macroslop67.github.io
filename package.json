@@ -1,0 +1,38 @@
+{
+  "name": "matricesbb",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint . --react-plugin --jsx-a11y-plugin",
+    "format": "oxfmt --check \"src/**/*.{ts,tsx,css}\" \"*.{ts,tsx,js,json,md}\"",
+    "format:write": "oxfmt --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,tsx,js,json,md}\"",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mdxeditor/editor": "^3.53.1",
+    "@tanstack/react-query": "^5.96.1",
+    "@tanstack/react-router": "^1.168.10",
+    "@tanstack/react-virtual": "^3.13.23",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "matrix-js-sdk": "^41.3.0-rc.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  }
+}
