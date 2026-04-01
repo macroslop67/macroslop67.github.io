@@ -10,6 +10,7 @@ This file captures key product and architecture choices for MatricesBB.
   - `/groups/:groupId`: group topic list + topic composer
   - `/threads/:threadId`: focused thread detail + reply composer
 - Space scope is selected from the Home toolbar and persisted across refreshes.
+- Theme supports light/dark modes; default follows system preferred color scheme until user overrides it.
 
 ## Authentication UX
 
@@ -51,6 +52,7 @@ This file captures key product and architecture choices for MatricesBB.
 - Thread titles should support a limited inline markdown subset (strong/emphasis/strikethrough only), with multiline/headings/code-like patterns flattened to plain inline rendering.
 - Space and group avatars should be surfaced in forum UI areas.
 - Unread and mention counts should be surfaced in forum UI areas.
+- Header account popover should expose a dark-mode toggle.
 
 ## Interaction Features
 
@@ -74,7 +76,7 @@ This file captures key product and architecture choices for MatricesBB.
 
 - Chats are a separate interface feature rendered as an expandable pane at the bottom-right.
 - Chat pane must show all joined non-space rooms, including rooms outside any selected space scope.
-- Encrypted rooms should be filtered out of chat lists when encryption state is detectable.
+- Encrypted rooms should be filtered out of chat lists when encryption state is detectable.default
 - No chat-specific data prefetch is allowed while the chat pane is collapsed.
 - Chat message rendering should be chat-like (bubble/feed), not forum-card style.
 - Chat message lists should use virtualization/windowing to keep large rooms responsive.

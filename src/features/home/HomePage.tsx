@@ -32,7 +32,15 @@ export function HomePage() {
       <header className="home-toolbar">
         <div>
           <h2 className="home-title">Forum Index</h2>
-          <p className="subtle-line">
+          <p className="subtle-line home-scope-indicator">
+            {selectedSpace?.avatarUrl ? (
+                <img
+                src={selectedSpace.avatarUrl}
+                alt={`${selectedSpace.name} avatar`}
+                className="group-avatar"
+                loading="lazy"
+                />
+            ) : null}
             {selectedSpace
               ? `Current space: ${selectedSpace.name} · ${selectedSpace.unreadCount} unread${
                   selectedSpace.highlightCount > 0
@@ -43,15 +51,6 @@ export function HomePage() {
                 ? "Current scope: all joined rooms."
                 : "No joined spaces found yet. Join at least one space to continue."}
           </p>
-
-          {selectedSpace?.avatarUrl ? (
-            <img
-              src={selectedSpace.avatarUrl}
-              alt={`${selectedSpace.name} avatar`}
-              className="group-avatar"
-              loading="lazy"
-            />
-          ) : null}
         </div>
 
         <div className="home-toolbar-actions">

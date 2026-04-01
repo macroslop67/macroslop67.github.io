@@ -4,6 +4,9 @@ import { type MatrixConnectionConfig } from "../../matrix/types";
 
 const SESSION_STORAGE_KEY = "matricesbb.connection.session";
 const LEGACY_LOCAL_STORAGE_KEY = "matricesbb.connection";
+const THEME_PREFERENCE_STORAGE_KEY = "matricesbb.theme";
+
+export type ThemePreference = "light" | "dark";
 
 export const connectionConfigSchema = z
   .object({
@@ -89,5 +92,25 @@ export const clearConnectionConfig = (): void => {
     localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
   } catch {
     // Ignore cleanup failures.
+  }
+};
+
+const isThemePreference = (value: string | null): value is ThemePreference =>
+  value === "light" || value === "dark";
+
+export const loadThemePreference = (): ThemePreference | null => {
+  try {
+    const storedValue = localStorage.getItem(THEME_PREFERENCE_STORAGE_KEY);
+    return isThemePreference(storedValue) ? storedValue : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveThemePreference = (themePreference: ThemePreference): void => {
+  try {
+    localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, themePreference);
+  } catch {
+    // If local storage is unavailable, keep preference runtime-only.
   }
 };

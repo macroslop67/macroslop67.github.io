@@ -528,10 +528,10 @@ export function ChatPane() {
 
       {expanded ? (
         <section className="chat-pane" aria-label="Chats">
-          <header className="chat-pane-header">
+          <header className="chat-pane-header" onClick={() => setExpanded(false)}>
             <h3>Chats</h3>
 
-            <div className="chat-pane-header-actions">
+            <div className="chat-pane-header-actions" onClick={(event) => event.stopPropagation()}>
               <button type="button" className="ghost-button" onClick={refreshRooms}>
                 Refresh
               </button>
