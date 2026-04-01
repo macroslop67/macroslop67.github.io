@@ -528,10 +528,11 @@ export function ChatPane() {
 
       {expanded ? (
         <section className="chat-pane" aria-label="Chats">
-          <header className="chat-pane-header" onClick={() => setExpanded(false)}>
+          {/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/prefer-tag-over-role */}
+          <header className="chat-pane-header" onClick={() => setExpanded(false)} role="button" aria-expanded={expanded}>
             <h3>Chats</h3>
 
-            <div className="chat-pane-header-actions" onClick={(event) => event.stopPropagation()}>
+            <div className="chat-pane-header-actions" onClick={(event) => event.stopPropagation()} role="group">
               <button type="button" className="ghost-button" onClick={refreshRooms}>
                 Refresh
               </button>

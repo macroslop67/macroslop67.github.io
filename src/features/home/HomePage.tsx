@@ -34,12 +34,12 @@ export function HomePage() {
           <h2 className="home-title">Forum Index</h2>
           <p className="subtle-line home-scope-indicator">
             {selectedSpace?.avatarUrl ? (
-                <img
+              <img
                 src={selectedSpace.avatarUrl}
                 alt={`${selectedSpace.name} avatar`}
                 className="group-avatar"
                 loading="lazy"
-                />
+              />
             ) : null}
             {selectedSpace
               ? `Current space: ${selectedSpace.name} · ${selectedSpace.unreadCount} unread${

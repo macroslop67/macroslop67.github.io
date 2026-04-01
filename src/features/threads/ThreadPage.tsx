@@ -516,9 +516,9 @@ export function ThreadPage({ threadId }: ThreadPageProps) {
             <p className="subtle-line">
               {effectiveThread.replyCount} replies · last activity{" "}
               <RelativeTime timestamp={effectiveThread.lastActivityAt} />
-                <p className="inline-note thread-hydration-note" aria-live="polite">
+              <p className="inline-note thread-hydration-note" aria-live="polite">
                 {endpointRepliesLoading ? "Loading more replies..." : "\u00a0"}
-                </p>
+              </p>
             </p>
           </div>
 
