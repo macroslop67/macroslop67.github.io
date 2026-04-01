@@ -127,7 +127,6 @@ export function AppShell() {
       <div className="app-shell">
         <header className="app-header">
           <Link to="/home" className="brand-mark">
-            <span className="brand-eyebrow">Matrix Space Client</span>
             <span className="brand-title">MatricesBB</span>
           </Link>
 
