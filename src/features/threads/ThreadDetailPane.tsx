@@ -11,7 +11,7 @@ import { avatarInitials, shortUserId } from "../../shared/format";
 import { MarkdownView } from "../../shared/MarkdownView";
 import { RelativeTime } from "../../shared/RelativeTime";
 import { type ComposerPayload, ThreadComposer } from "./ThreadComposer";
-import { type ReplyNode, buildReplyForest } from "./reply-tree";
+import { MAX_TREE_NESTING_DEPTH, type ReplyNode, buildReplyForest } from "./reply-tree";
 import {
   useEditPostMutation,
   useReactToPostMutation,
@@ -24,6 +24,8 @@ const REPLY_COMPOSER_FORM_ID = "threadReplyComposer";
 
 const getPostAnchorId = (eventId: string): string =>
   `post-${eventId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+const MAX_TREE_INDENT_LEVEL = MAX_TREE_NESTING_DEPTH - 1;
 
 const normalizeInlineText = (value: string): string => value.trim().replace(/\s+/g, " ");
 
@@ -86,7 +88,58 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
     return indices;
   }, [orderedPosts]);
 
-  const replyForest = useMemo(() => buildReplyForest(thread), [thread]);
+  const replyRelationByEventId = useMemo(() => {
+    const relationByEventId = new Map<string, { parentEventId: string | null; depth: number }>();
+    const replyByEventId = new Map(thread.replies.map((reply) => [reply.eventId, reply] as const));
+
+    const resolveDepth = (eventId: string, chain = new Set<string>()): number => {
+      if (chain.has(eventId)) {
+        return 0;
+      }
+
+      const existing = relationByEventId.get(eventId);
+      if (existing) {
+        return existing.depth;
+      }
+
+      const reply = replyByEventId.get(eventId);
+      if (!reply) {
+        relationByEventId.set(eventId, {
+          parentEventId: null,
+          depth: 0,
+        });
+        return 0;
+      }
+
+      const parentEventId = reply.replyToEventId;
+      if (!parentEventId || parentEventId === thread.root.eventId) {
+        relationByEventId.set(eventId, {
+          parentEventId: null,
+          depth: 0,
+        });
+        return 0;
+      }
+
+      chain.add(eventId);
+      const parentDepth = resolveDepth(parentEventId, chain);
+      chain.delete(eventId);
+
+      const depth = parentDepth + 1;
+      relationByEventId.set(eventId, {
+        parentEventId,
+        depth,
+      });
+      return depth;
+    };
+
+    for (const reply of thread.replies) {
+      resolveDepth(reply.eventId);
+    }
+
+    return relationByEventId;
+  }, [thread.replies, thread.root.eventId]);
+
+  const replyForest = useMemo(() => buildReplyForest(thread, MAX_TREE_NESTING_DEPTH), [thread]);
   const threadStarterUserId = thread.root.authorId;
 
   const resolveReplyReference = (
@@ -118,6 +171,47 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
     }, 1700);
   };
 
+  const resolveFocusablePostEventId = (requestedEventId: string): string | null => {
+    let preferredEventId = requestedEventId;
+
+    if (viewMode === "tree") {
+      const relation = replyRelationByEventId.get(requestedEventId);
+      if (relation && relation.depth > MAX_TREE_INDENT_LEVEL) {
+        preferredEventId = requestedEventId;
+
+        // Deep nodes may be visually flattened in tree view; focus their nearest visible ancestor.
+        for (let hop = 0; hop < 64; hop += 1) {
+          const nextRelation = replyRelationByEventId.get(preferredEventId);
+          if (!nextRelation || nextRelation.depth <= MAX_TREE_INDENT_LEVEL) {
+            break;
+          }
+
+          if (!nextRelation.parentEventId) {
+            preferredEventId = thread.root.eventId;
+            break;
+          }
+
+          preferredEventId = nextRelation.parentEventId;
+        }
+      }
+    }
+
+    let currentEventId: string | null = preferredEventId;
+    for (let hop = 0; hop < 64 && currentEventId; hop += 1) {
+      const candidateElement = document.getElementById(getPostAnchorId(currentEventId));
+      if (candidateElement) {
+        return currentEventId;
+      }
+
+      const relation = replyRelationByEventId.get(currentEventId);
+      currentEventId =
+        relation?.parentEventId ??
+        (currentEventId === thread.root.eventId ? null : thread.root.eventId);
+    }
+
+    return null;
+  };
+
   const focusReplyComposer = () => {
     const composerElement = document.getElementById(REPLY_COMPOSER_FORM_ID);
     if (!composerElement) {
@@ -137,14 +231,19 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
   };
 
   const focusParentPost = (eventId: string) => {
-    const anchorId = getPostAnchorId(eventId);
+    const focusEventId = resolveFocusablePostEventId(eventId);
+    if (!focusEventId) {
+      return;
+    }
+
+    const anchorId = getPostAnchorId(focusEventId);
     const postElement = document.getElementById(anchorId);
     if (!postElement) {
       return;
     }
 
     postElement.scrollIntoView({ behavior: "smooth", block: "center" });
-    highlightPost(eventId);
+    highlightPost(focusEventId);
 
     if (postElement instanceof HTMLElement) {
       postElement.focus();
@@ -205,12 +304,12 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
     cancelEditing();
   };
 
-  const moderatePost = (post: ForumPost) => {
-    if (!thread.canModerate) {
-      return;
-    }
+  const canDeletePost = (post: ForumPost): boolean => {
+    return thread.canModerate || currentUserId === post.authorId;
+  };
 
-    if (!window.confirm("Remove this post from the room timeline?")) {
+  const deletePost = (post: ForumPost) => {
+    if (!window.confirm("Delete this message?")) {
       return;
     }
 
@@ -242,14 +341,14 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
               isHighlighted={highlightedPostId === thread.root.eventId}
               threadStarter={true}
               canEdit={currentUserId === thread.root.authorId && thread.root.body.trim().length > 0}
-              canModerate={thread.canModerate}
+              canDelete={canDeletePost(thread.root)}
               isEditing={editingPostId === thread.root.eventId}
               editingMarkdown={editingMarkdown}
               onEditMarkdownChange={setEditingMarkdown}
               onStartEdit={() => startEditingPost(thread.root)}
               onCancelEdit={cancelEditing}
               onSaveEdit={() => savePostEdit(thread.root)}
-              onModerate={() => moderatePost(thread.root)}
+              onDelete={() => deletePost(thread.root)}
               onReply={() => openReplyComposer(null)}
               onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
             />
@@ -261,7 +360,6 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
                 depth={0}
                 threadStarterUserId={threadStarterUserId}
                 currentUserId={currentUserId}
-                canModerate={thread.canModerate}
                 threadRootEventId={thread.root.eventId}
                 postIndexByEventId={postIndexByEventId}
                 editingPostId={editingPostId}
@@ -271,7 +369,8 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
                 onStartEdit={startEditingPost}
                 onCancelEdit={cancelEditing}
                 onSaveEdit={savePostEdit}
-                onModerate={moderatePost}
+                onDelete={deletePost}
+                canDeletePost={canDeletePost}
                 onReply={(eventId) => openReplyComposer(eventId)}
                 onReact={reactToPost}
                 onFocusReplyTarget={focusParentPost}
@@ -286,47 +385,45 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
               isHighlighted={highlightedPostId === thread.root.eventId}
               threadStarter={thread.root.authorId === threadStarterUserId}
               canEdit={currentUserId === thread.root.authorId && thread.root.body.trim().length > 0}
-              canModerate={thread.canModerate}
+              canDelete={canDeletePost(thread.root)}
               isEditing={editingPostId === thread.root.eventId}
               editingMarkdown={editingMarkdown}
               onEditMarkdownChange={setEditingMarkdown}
               onStartEdit={() => startEditingPost(thread.root)}
               onCancelEdit={cancelEditing}
               onSaveEdit={() => savePostEdit(thread.root)}
-              onModerate={() => moderatePost(thread.root)}
+              onDelete={() => deletePost(thread.root)}
               onReply={() => openReplyComposer(null)}
               onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
             />
 
-            {thread.replies.map((reply) =>
-              (() => {
-                const replyReference = resolveReplyReference(reply);
+            {thread.replies.map((reply) => {
+              const replyReference = resolveReplyReference(reply);
 
-                return (
-                  <ForumStylePost
-                    key={reply.eventId}
-                    post={reply}
-                    postIndex={postIndexByEventId.get(reply.eventId) ?? 0}
-                    replyToEventId={replyReference?.replyToEventId ?? null}
-                    replyToIndex={replyReference?.replyToIndex ?? null}
-                    onFocusReplyTarget={focusParentPost}
-                    isHighlighted={highlightedPostId === reply.eventId}
-                    threadStarter={reply.authorId === threadStarterUserId}
-                    canEdit={currentUserId === reply.authorId && reply.body.trim().length > 0}
-                    canModerate={thread.canModerate}
-                    isEditing={editingPostId === reply.eventId}
-                    editingMarkdown={editingMarkdown}
-                    onEditMarkdownChange={setEditingMarkdown}
-                    onStartEdit={() => startEditingPost(reply)}
-                    onCancelEdit={cancelEditing}
-                    onSaveEdit={() => savePostEdit(reply)}
-                    onModerate={() => moderatePost(reply)}
-                    onReply={() => openReplyComposer(reply.eventId)}
-                    onReact={(emoji) => reactToPost(reply.eventId, emoji)}
-                  />
-                );
-              })(),
-            )}
+              return (
+                <ForumStylePost
+                  key={reply.eventId}
+                  post={reply}
+                  postIndex={postIndexByEventId.get(reply.eventId) ?? 0}
+                  replyToEventId={replyReference?.replyToEventId ?? null}
+                  replyToIndex={replyReference?.replyToIndex ?? null}
+                  onFocusReplyTarget={focusParentPost}
+                  isHighlighted={highlightedPostId === reply.eventId}
+                  threadStarter={reply.authorId === threadStarterUserId}
+                  canEdit={currentUserId === reply.authorId && reply.body.trim().length > 0}
+                  canDelete={canDeletePost(reply)}
+                  isEditing={editingPostId === reply.eventId}
+                  editingMarkdown={editingMarkdown}
+                  onEditMarkdownChange={setEditingMarkdown}
+                  onStartEdit={() => startEditingPost(reply)}
+                  onCancelEdit={cancelEditing}
+                  onSaveEdit={() => savePostEdit(reply)}
+                  onDelete={() => deletePost(reply)}
+                  onReply={() => openReplyComposer(reply.eventId)}
+                  onReact={(emoji) => reactToPost(reply.eventId, emoji)}
+                />
+              );
+            })}
           </section>
         )
       ) : (
@@ -337,14 +434,14 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
             isHighlighted={highlightedPostId === thread.root.eventId}
             threadStarter={thread.root.authorId === threadStarterUserId}
             canEdit={currentUserId === thread.root.authorId && thread.root.body.trim().length > 0}
-            canModerate={thread.canModerate}
+            canDelete={canDeletePost(thread.root)}
             isEditing={editingPostId === thread.root.eventId}
             editingMarkdown={editingMarkdown}
             onEditMarkdownChange={setEditingMarkdown}
             onStartEdit={() => startEditingPost(thread.root)}
             onCancelEdit={cancelEditing}
             onSaveEdit={() => savePostEdit(thread.root)}
-            onModerate={() => moderatePost(thread.root)}
+            onDelete={() => deletePost(thread.root)}
             onReply={() => openReplyComposer(null)}
             onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
           />
@@ -386,14 +483,14 @@ type ForumStylePostProps = {
   onFocusReplyTarget?: ((eventId: string) => void) | null;
   threadStarter?: boolean;
   canEdit: boolean;
-  canModerate: boolean;
+  canDelete: boolean;
   isEditing: boolean;
   editingMarkdown: string;
   onEditMarkdownChange: (value: string) => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
-  onModerate: () => void;
+  onDelete: () => void;
   onReply: () => void;
   onReact: (emoji: string) => void;
 };
@@ -407,14 +504,14 @@ function ForumStylePost({
   onFocusReplyTarget = null,
   threadStarter = false,
   canEdit,
-  canModerate,
+  canDelete,
   isEditing,
   editingMarkdown,
   onEditMarkdownChange,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
-  onModerate,
+  onDelete,
   onReply,
   onReact,
 }: ForumStylePostProps) {
@@ -454,14 +551,17 @@ function ForumStylePost({
           />
 
           <PostActions
+            post={post}
             canEdit={canEdit}
-            canModerate={canModerate}
+            canDelete={canDelete}
             isEditing={isEditing}
             onReply={onReply}
             onStartEdit={onStartEdit}
             onCancelEdit={onCancelEdit}
             onSaveEdit={onSaveEdit}
-            onModerate={onModerate}
+            onDelete={onDelete}
+            onReact={onReact}
+            showReactionsInActions={false}
           />
         </header>
 
@@ -489,14 +589,14 @@ function TreeStylePost({
   onFocusReplyTarget,
   threadStarter,
   canEdit,
-  canModerate,
+  canDelete,
   isEditing,
   editingMarkdown,
   onEditMarkdownChange,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
-  onModerate,
+  onDelete,
   onReply,
   onReact,
 }: TreeStylePostProps) {
@@ -528,17 +628,18 @@ function TreeStylePost({
       />
 
       <PostActions
+        post={post}
         canEdit={canEdit}
-        canModerate={canModerate}
+        canDelete={canDelete}
         isEditing={isEditing}
         onReply={onReply}
         onStartEdit={onStartEdit}
         onCancelEdit={onCancelEdit}
         onSaveEdit={onSaveEdit}
-        onModerate={onModerate}
+        onDelete={onDelete}
+        onReact={onReact}
+        showReactionsInActions={true}
       />
-
-      <PostReactions post={post} onReact={onReact} />
     </article>
   );
 }
@@ -549,7 +650,7 @@ type ReplyTreeNodeProps = {
   threadStarterUserId: string;
   threadRootEventId: string;
   currentUserId: string | null;
-  canModerate: boolean;
+  canDeletePost: (post: ForumPost) => boolean;
   postIndexByEventId: Map<string, number>;
   editingPostId: string | null;
   editingMarkdown: string;
@@ -558,7 +659,7 @@ type ReplyTreeNodeProps = {
   onStartEdit: (post: ForumPost) => void;
   onCancelEdit: () => void;
   onSaveEdit: (post: ForumPost) => void;
-  onModerate: (post: ForumPost) => void;
+  onDelete: (post: ForumPost) => void;
   onReply: (eventId: string) => void;
   onReact: (eventId: string, emoji: string) => void;
   onFocusReplyTarget: (eventId: string) => void;
@@ -570,7 +671,7 @@ function ReplyTreeNode({
   threadStarterUserId,
   threadRootEventId,
   currentUserId,
-  canModerate,
+  canDeletePost,
   postIndexByEventId,
   editingPostId,
   editingMarkdown,
@@ -579,12 +680,11 @@ function ReplyTreeNode({
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
-  onModerate,
+  onDelete,
   onReply,
   onReact,
   onFocusReplyTarget,
 }: ReplyTreeNodeProps) {
-  const maxDepthIndent = Math.min(depth, 5) * 12;
   const isEditing = editingPostId === node.reply.eventId;
   const canEdit = currentUserId === node.reply.authorId && node.reply.body.trim().length > 0;
   const replyToEventId =
@@ -594,7 +694,7 @@ function ReplyTreeNode({
   const replyToIndex = replyToEventId ? (postIndexByEventId.get(replyToEventId) ?? null) : null;
 
   return (
-    <div className="reply-node" style={{ marginLeft: maxDepthIndent }}>
+    <div className="reply-node">
       <TreeStylePost
         post={node.reply}
         postIndex={postIndexByEventId.get(node.reply.eventId) ?? 0}
@@ -604,14 +704,14 @@ function ReplyTreeNode({
         isHighlighted={highlightedPostId === node.reply.eventId}
         threadStarter={node.reply.authorId === threadStarterUserId}
         canEdit={canEdit}
-        canModerate={canModerate}
+        canDelete={canDeletePost(node.reply)}
         isEditing={isEditing}
         editingMarkdown={editingMarkdown}
         onEditMarkdownChange={onEditMarkdownChange}
         onStartEdit={() => onStartEdit(node.reply)}
         onCancelEdit={onCancelEdit}
         onSaveEdit={() => onSaveEdit(node.reply)}
-        onModerate={() => onModerate(node.reply)}
+        onDelete={() => onDelete(node.reply)}
         onReply={() => onReply(node.reply.eventId)}
         onReact={(emoji) => onReact(node.reply.eventId, emoji)}
       />
@@ -626,7 +726,7 @@ function ReplyTreeNode({
               threadStarterUserId={threadStarterUserId}
               threadRootEventId={threadRootEventId}
               currentUserId={currentUserId}
-              canModerate={canModerate}
+              canDeletePost={canDeletePost}
               postIndexByEventId={postIndexByEventId}
               editingPostId={editingPostId}
               editingMarkdown={editingMarkdown}
@@ -635,7 +735,7 @@ function ReplyTreeNode({
               onStartEdit={onStartEdit}
               onCancelEdit={onCancelEdit}
               onSaveEdit={onSaveEdit}
-              onModerate={onModerate}
+              onDelete={onDelete}
               onReply={onReply}
               onReact={onReact}
               onFocusReplyTarget={onFocusReplyTarget}
@@ -800,54 +900,64 @@ function PostContent({ post, isEditing, editingMarkdown, onEditMarkdownChange }:
 }
 
 type PostActionsProps = {
+  post: ForumPost;
   canEdit: boolean;
-  canModerate: boolean;
+  canDelete: boolean;
   isEditing: boolean;
   onReply: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
-  onModerate: () => void;
+  onDelete: () => void;
+  onReact: (emoji: string) => void;
+  showReactionsInActions: boolean;
 };
 
 function PostActions({
+  post,
   canEdit,
-  canModerate,
+  canDelete,
   isEditing,
   onReply,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
-  onModerate,
+  onDelete,
+  onReact,
+  showReactionsInActions,
 }: PostActionsProps) {
   return (
     <div className="post-action-row">
-      <button className="reply-button" type="button" onClick={onReply}>
-        Reply
-      </button>
-
-      {canEdit && !isEditing ? (
-        <button className="reply-button" type="button" onClick={onStartEdit}>
-          Edit
+      <div className="post-action-primary">
+        <button className="reply-button" type="button" onClick={onReply}>
+          Reply
         </button>
-      ) : null}
 
-      {isEditing ? (
-        <>
-          <button className="reply-button" type="button" onClick={onSaveEdit}>
-            Save
+        {canEdit && !isEditing ? (
+          <button className="reply-button" type="button" onClick={onStartEdit}>
+            Edit
           </button>
-          <button className="reply-button" type="button" onClick={onCancelEdit}>
-            Cancel
-          </button>
-        </>
-      ) : null}
+        ) : null}
 
-      {canModerate ? (
-        <button className="reply-button" type="button" onClick={onModerate}>
-          Remove
-        </button>
-      ) : null}
+        {isEditing ? (
+          <>
+            <button className="reply-button" type="button" onClick={onSaveEdit}>
+              Save
+            </button>
+            <button className="reply-button" type="button" onClick={onCancelEdit}>
+              Cancel
+            </button>
+          </>
+        ) : null}
+
+        {canDelete ? (
+          <button className="reply-button" type="button" onClick={onDelete}>
+            Delete
+          </button>
+        ) : null}
+      </div>
+
+      {showReactionsInActions ? <PostReactions post={post} onReact={onReact} /> : null}
     </div>
   );
 }

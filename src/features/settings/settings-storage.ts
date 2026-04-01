@@ -2,7 +2,8 @@ import { z } from "zod";
 import { DEFAULT_INITIAL_SYNC_LIMIT } from "../../matrix/constants";
 import { type MatrixConnectionConfig } from "../../matrix/types";
 
-const STORAGE_KEY = "matricesbb.connection";
+const SESSION_STORAGE_KEY = "matricesbb.connection.session";
+const LEGACY_LOCAL_STORAGE_KEY = "matricesbb.connection";
 
 export const connectionConfigSchema = z
   .object({
@@ -37,11 +38,33 @@ export const parseConnectionDraft = (draft: ConnectionConfigDraft): MatrixConnec
   });
 
 export const saveConnectionConfig = (config: MatrixConnectionConfig): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // If session storage is unavailable, skip persistence and keep runtime-only session.
+  }
+
+  try {
+    localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
 };
 
 export const loadConnectionConfig = (): MatrixConnectionConfig | null => {
-  const rawValue = localStorage.getItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
+
+  let rawValue: string | null = null;
+  try {
+    rawValue = sessionStorage.getItem(SESSION_STORAGE_KEY);
+  } catch {
+    rawValue = null;
+  }
+
   if (!rawValue) {
     return null;
   }
@@ -56,5 +79,15 @@ export const loadConnectionConfig = (): MatrixConnectionConfig | null => {
 };
 
 export const clearConnectionConfig = (): void => {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
+
+  try {
+    localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
 };

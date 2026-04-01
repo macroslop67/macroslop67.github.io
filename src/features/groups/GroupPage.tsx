@@ -2,6 +2,7 @@ import { Link, Navigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMatrixForum } from "../../matrix/context";
 import { compactText, shortUserId } from "../../shared/format";
+import { InlineTitleMarkdown } from "../../shared/InlineTitleMarkdown";
 import { RelativeTime } from "../../shared/RelativeTime";
 import { type ComposerPayload, ThreadComposer } from "../threads/ThreadComposer";
 import { useCreateThreadMutation } from "../threads/use-thread-mutations";
@@ -126,7 +127,9 @@ export function GroupPage({ groupId }: GroupPageProps) {
                 className="topic-row"
               >
                 <div className="topic-main">
-                  <strong>{thread.title}</strong>
+                  <strong>
+                    <InlineTitleMarkdown title={thread.title} />
+                  </strong>
                   <p>
                     {compactText(
                       thread.replies[0]?.body ||

@@ -16,7 +16,7 @@ This file captures key product and architecture choices for MatricesBB.
 - Unauthenticated users are redirected to `/login`.
 - Login page is login-first (homeserver + user + password).
 - Optional token mode is available for direct access-token sign-in.
-- Credentials are persisted locally for development convenience.
+- Access tokens are session-scoped and must not be persisted in `localStorage`.
 - Header navigation does not expose a separate "Connection" tab.
 
 ## Matrix Behavior
@@ -24,6 +24,7 @@ This file captures key product and architecture choices for MatricesBB.
 - Encryption is intentionally out of scope for this iteration.
 - Thread roots must be sourced from `/_matrix/client/v1/rooms/{roomId}/threads`.
 - Threads endpoint usage must support pagination while `next_batch` is present.
+- Thread reply counts should use `/threads` response relation metadata (`m.relations["m.thread"].count`) when available.
 - Thread reply hydration should use the parent-child relations API (`/_matrix/client/v1/rooms/{roomId}/relations/{eventId}`) and filter thread relations client-side.
 - Thread discovery may merge endpoint roots with SDK thread data for resiliency.
 - Thread creation semantics:
@@ -37,14 +38,17 @@ This file captures key product and architecture choices for MatricesBB.
 - Thread page supports two modes:
   - forum mode (dense post layout with left user column and avatar)
   - tree mode (nested replies)
+- Tree mode should cap maximum visible nesting depth to keep deep discussions readable.
 - "Thread starter" badge is shown on all posts authored by thread starter.
 - Reply composer shows parent-reply preview between heading and editor when replying to a specific post.
 - Reply-preview click should focus/scroll the parent post.
 - For replies that target non-root posts, post metadata should surface an inline `In reply to #index` reference.
 - Focused/linked-to posts should be temporarily highlighted to aid visual discovery after scroll.
+- Focus behavior for deep replies should gracefully fall back to a sensible visible ancestor when exact target focus is not practical.
 - Each post should have a stable anchor id and a copyable `#index` link near publication time.
 - Edited metadata should render inline with publication time metadata.
 - All visible relative timestamps should use semantic `<time>` output with absolute tooltip title.
+- Thread titles should support a limited inline markdown subset (strong/emphasis/strikethrough only), with multiline/headings/code-like patterns flattened to plain inline rendering.
 - Space and group avatars should be surfaced in forum UI areas.
 - Unread and mention counts should be surfaced in forum UI areas.
 
@@ -56,9 +60,12 @@ This file captures key product and architecture choices for MatricesBB.
 - In chat compact composer, small Upload and Poll controls share the same action row as Send.
 - Emoji reactions are supported on root posts and replies via `m.reaction` / `m.annotation`.
 - Reaction chips should support toggling an existing self-reaction off (unreact) on second click.
+- In forum/thread post layout, reaction chips should be grouped alongside post action controls.
+- In forum/board mode, reaction chips should render in the body area below content; in tree mode they stay grouped with actions.
 - Composer supports attachments and poll creation.
 - Users can edit their own posts.
 - Moderation-capable users can remove posts.
+- Message deletion actions should require explicit user confirmation before redact calls.
 - `Ctrl+Enter` (and `Cmd+Enter`) submits thread/reply forms.
 - Reply actions should focus the reply form.
 - Loading states should use skeleton placeholders where appropriate.
@@ -91,6 +98,11 @@ This file captures key product and architecture choices for MatricesBB.
 
 - Linting/formatting uses oxlint + oxfmt.
 - No test framework is configured by design in this repository state.
+- GitHub Actions should include CI checks and a GitHub Pages deployment workflow for the web app.
+
+## Delivery
+
+- The app should include basic PWA installability foundations (manifest, service worker registration, install metadata) for mobile install support.
 
 ## Maintenance Rule
 

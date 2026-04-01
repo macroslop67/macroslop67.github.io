@@ -13,6 +13,7 @@ import {
 } from "../../matrix/constants";
 import { useMatrixForum } from "../../matrix/context";
 import { type ForumAttachment, type ThreadReply, type ThreadViewMode } from "../../matrix/types";
+import { InlineTitleMarkdown } from "../../shared/InlineTitleMarkdown";
 import { RelativeTime } from "../../shared/RelativeTime";
 import { ThreadDetailPane } from "./ThreadDetailPane";
 
@@ -451,7 +452,7 @@ export function ThreadPage({ threadId }: ThreadPageProps) {
     return {
       ...thread,
       replies,
-      replyCount: replies.length,
+      replyCount: Math.max(thread.replyCount, replies.length),
       lastActivityAt,
     };
   }, [thread, endpointReplies]);
@@ -509,13 +510,15 @@ export function ThreadPage({ threadId }: ThreadPageProps) {
 
         <div className="thread-page-topbar">
           <div>
-            <h2 className="thread-page-title">{effectiveThread.title}</h2>
+            <h2 className="thread-page-title">
+              <InlineTitleMarkdown title={effectiveThread.title} />
+            </h2>
             <p className="subtle-line">
               {effectiveThread.replyCount} replies · last activity{" "}
-              <RelativeTime timestamp={effectiveThread.lastActivityAt} />{" "}
-              <p className="inline-note thread-hydration-note" aria-live="polite">
+              <RelativeTime timestamp={effectiveThread.lastActivityAt} />
+                <p className="inline-note thread-hydration-note" aria-live="polite">
                 {endpointRepliesLoading ? "Loading more replies..." : "\u00a0"}
-              </p>
+                </p>
             </p>
           </div>
 
@@ -525,7 +528,7 @@ export function ThreadPage({ threadId }: ThreadPageProps) {
               className={`mode-button ${viewMode === "board" ? "mode-button-active" : ""}`}
               onClick={() => setViewMode("board")}
             >
-              Forum
+              Linear
             </button>
             <button
               type="button"

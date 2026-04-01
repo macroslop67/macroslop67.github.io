@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMatrixForum } from "../../matrix/context";
 import { type ForumSpace, type ForumThread, type ThreadViewMode } from "../../matrix/types";
 import { compactText, shortUserId } from "../../shared/format";
+import { InlineTitleMarkdown } from "../../shared/InlineTitleMarkdown";
 import { RelativeTime } from "../../shared/RelativeTime";
 import { type ComposerPayload, ThreadComposer } from "./ThreadComposer";
 import { ThreadDetailPane } from "./ThreadDetailPane";
@@ -277,7 +278,9 @@ function ThreadCard({ thread, selected, viewMode, onOpen }: ThreadCardProps) {
       className={`thread-card ${selected ? "thread-card-selected" : ""}`}
       onClick={() => onOpen(thread.id)}
     >
-      <h3>{thread.title}</h3>
+      <h3>
+        <InlineTitleMarkdown title={thread.title} />
+      </h3>
 
       <div className="thread-card-meta">
         <span>#{thread.groupName}</span>

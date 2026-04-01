@@ -54,6 +54,7 @@ export interface EndpointThreadRoot {
   senderId: string;
   createdAt: number;
   content: MatrixContent;
+  replyCount: number | null;
 }
 
 interface ThreadRelation {
@@ -882,6 +883,8 @@ export const buildThreadsForRoom = (
     const lastActivityAt = lastReply
       ? Math.max(rootWithReactions.createdAt, lastReply.createdAt)
       : rootWithReactions.createdAt;
+    const endpointReplyCount = endpointRoot?.replyCount;
+    const replyCount = Math.max(replies.length, endpointReplyCount ?? 0);
 
     threads.push({
       id: root.eventId,
@@ -891,7 +894,7 @@ export const buildThreadsForRoom = (
       title,
       root: rootWithReactions,
       replies,
-      replyCount: replies.length,
+      replyCount,
       lastActivityAt,
       canModerate: roomCanModerate,
     });

@@ -452,12 +452,12 @@ export function ChatPane() {
     }
   };
 
-  const removePost = async (message: ChatMessage, canModerate: boolean) => {
-    if (!canModerate) {
+  const removePost = async (message: ChatMessage, canDelete: boolean) => {
+    if (!canDelete) {
       return;
     }
 
-    if (!window.confirm("Remove this message?")) {
+    if (!window.confirm("Delete this message?")) {
       return;
     }
 
@@ -627,7 +627,12 @@ export function ChatPane() {
                         onSaveEdit={(message) => void saveEdit(message)}
                         onEditMarkdownChange={setEditingMarkdown}
                         onReact={(message, emoji) => void reactToPost(message, emoji)}
-                        onRemove={(message) => void removePost(message, selectedRoom.canModerate)}
+                        onRemove={(message) =>
+                          void removePost(
+                            message,
+                            selectedRoom.canModerate || currentUserId === message.authorId,
+                          )
+                        }
                       />
                     ) : null}
                   </div>
@@ -961,7 +966,7 @@ function VirtualizedChatMessages({
                 isHighlighted={highlightedEventId === message.eventId}
                 editingMarkdown={editingMarkdown}
                 canEdit={currentUserId === message.authorId && message.body.trim().length > 0}
-                canModerate={roomCanModerate}
+                canDelete={roomCanModerate || currentUserId === message.authorId}
                 onReply={() => onReply(message.eventId)}
                 onStartThread={() => onStartThread(message.eventId)}
                 onFocusParent={() =>
@@ -991,7 +996,7 @@ type ChatMessageRowProps = {
   isHighlighted: boolean;
   editingMarkdown: string;
   canEdit: boolean;
-  canModerate: boolean;
+  canDelete: boolean;
   onReply: () => void;
   onStartThread: () => void;
   onFocusParent: () => void;
@@ -1012,7 +1017,7 @@ function ChatMessageRow({
   isHighlighted,
   editingMarkdown,
   canEdit,
-  canModerate,
+  canDelete,
   onReply,
   onStartThread,
   onFocusParent,
@@ -1137,9 +1142,9 @@ function ChatMessageRow({
             </>
           ) : null}
 
-          {canModerate ? (
+          {canDelete ? (
             <button type="button" className="reply-button" onClick={onRemove}>
-              Remove
+              Delete
             </button>
           ) : null}
         </div>

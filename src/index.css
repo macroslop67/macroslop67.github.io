@@ -18,8 +18,6 @@
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
-  --font-body: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-  --font-heading: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 * {
@@ -28,13 +26,13 @@
 
 body {
   margin: 0;
-  font-family: var(--font-body);
   color: var(--ink);
   background:
     radial-gradient(circle at 8% 12%, rgba(215, 101, 62, 0.22), transparent 22%),
     radial-gradient(circle at 88% 20%, rgba(13, 124, 102, 0.2), transparent 24%),
     linear-gradient(165deg, var(--bg) 0%, #efe6d6 52%, #e7dac6 100%);
   min-height: 100vh;
+  font-family: sans-serif;
 }
 
 body::before {
@@ -111,7 +109,6 @@ body::before {
 }
 
 .brand-title {
-  font-family: var(--font-heading);
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -200,7 +197,6 @@ body::before {
 .info-card h3,
 .empty-state h2 {
   margin: 0;
-  font-family: var(--font-heading);
   letter-spacing: -0.02em;
 }
 
@@ -208,6 +204,10 @@ body::before {
   color: var(--ink-subtle);
   font-size: 13px;
   margin: 8px 0 14px;
+}
+
+.subtle-line .thread-hydration-note {
+  display: inline;
 }
 
 .group-list {
@@ -336,7 +336,6 @@ body::before {
 .group-title,
 .thread-page-title {
   margin: 0;
-  font-family: var(--font-heading);
   letter-spacing: -0.02em;
 }
 
@@ -370,7 +369,6 @@ body::before {
 
 .card-heading-row h3 {
   margin: 0;
-  font-family: var(--font-heading);
   font-size: 17px;
 }
 
@@ -497,7 +495,7 @@ body::before {
 .thread-page-topbar {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  column-gap: 12px;
   align-items: flex-start;
 }
 
@@ -531,7 +529,6 @@ body::before {
 
 .topic-main strong {
   display: block;
-  font-family: var(--font-heading);
   font-size: 15px;
   margin-bottom: 3px;
 }
@@ -599,7 +596,6 @@ body::before {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-heading);
   font-weight: 700;
   color: var(--ink-subtle);
 }
@@ -607,6 +603,9 @@ body::before {
 .forum-user-name {
   font-size: 14px;
   line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .forum-user-handle {
@@ -645,8 +644,23 @@ body::before {
 
 .post-action-row {
   display: inline-flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  justify-content: space-between;
+  flex-direction: row-reverse;
+}
+
+.post-action-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.post-action-row .post-reactions {
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .post-attachments {
@@ -692,7 +706,6 @@ body::before {
 
 .post-poll h4 {
   margin: 0 0 8px;
-  font-family: var(--font-heading);
   font-size: 15px;
 }
 
@@ -905,7 +918,6 @@ button:disabled {
 .composer-header h3 {
   margin: 0;
   font-size: 15px;
-  font-family: var(--font-heading);
 }
 
 .composer-context-preview {
@@ -971,7 +983,6 @@ button:disabled {
 }
 
 .mdx-editor-content {
-  font-family: var(--font-body);
   font-size: 15px;
 }
 
@@ -1097,7 +1108,6 @@ button:disabled {
 .thread-card h3 {
   margin: 0;
   font-size: 16px;
-  font-family: var(--font-heading);
 }
 
 .thread-card-meta {
@@ -1265,6 +1275,7 @@ button:disabled {
   border-left: 3px solid rgba(13, 124, 102, 0.26);
   padding-left: 12px;
   margin-top: 8px;
+  margin-left: 12px;
 }
 
 .reply-children {
@@ -1341,7 +1352,6 @@ button:disabled {
 
 .auth-bootstrap-panel h3 {
   margin: 0;
-  font-family: var(--font-heading);
   font-size: 16px;
   letter-spacing: -0.01em;
 }
@@ -1407,7 +1417,6 @@ button:disabled {
   color: #fff;
   border-radius: 999px;
   padding: 10px 14px;
-  font-family: var(--font-heading);
   font-size: 13px;
   letter-spacing: 0.01em;
   display: inline-flex;
@@ -1453,7 +1462,6 @@ button:disabled {
 
 .chat-pane-header h3 {
   margin: 0;
-  font-family: var(--font-heading);
 }
 
 .chat-pane-header-actions {
@@ -1552,7 +1560,6 @@ button:disabled {
 
 .chat-room-header h4 {
   margin: 0;
-  font-family: var(--font-heading);
   font-size: 18px;
   color: var(--ink);
 }

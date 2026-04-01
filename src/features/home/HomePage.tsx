@@ -1,6 +1,7 @@
 import { Link, Navigate } from "@tanstack/react-router";
 import { useMatrixForum } from "../../matrix/context";
 import { compactText, shortUserId } from "../../shared/format";
+import { InlineTitleMarkdown } from "../../shared/InlineTitleMarkdown";
 import { RelativeTime } from "../../shared/RelativeTime";
 
 export function HomePage() {
@@ -136,7 +137,7 @@ export function HomePage() {
                               params={{ threadId: thread.id }}
                               className="thread-preview-link"
                             >
-                              {thread.title}
+                              <InlineTitleMarkdown title={thread.title} />
                             </Link>{" "}
                             <span className="inline-note">
                               <RelativeTime timestamp={thread.lastActivityAt} /> · @
@@ -176,7 +177,7 @@ export function HomePage() {
                     params={{ threadId: thread.id }}
                     className="recent-activity-link"
                   >
-                    {thread.title}
+                    <InlineTitleMarkdown title={thread.title} />
                   </Link>
                   <div className="recent-activity-meta">
                     <Link

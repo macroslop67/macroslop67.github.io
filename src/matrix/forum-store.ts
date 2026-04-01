@@ -65,6 +65,8 @@ type ThreadEndpointEvent = {
   sender?: string;
   origin_server_ts?: number;
   content?: MatrixContent;
+  unsigned?: MatrixContent;
+  "m.relations"?: MatrixContent;
 };
 
 type ThreadsEndpointResponse = {
@@ -114,12 +116,38 @@ const asString = (value: unknown): string | null => (typeof value === "string" ?
 
 const asNumber = (value: unknown): number | null => (typeof value === "number" ? value : null);
 
+const asInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+
+  if (typeof value === "string") {
+    const parsedValue = Number.parseInt(value, 10);
+    return Number.isNaN(parsedValue) ? null : Math.max(0, parsedValue);
+  }
+
+  return null;
+};
+
 const asStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value.filter((item): item is string => typeof item === "string");
+};
+
+const readThreadReplyCount = (event: ThreadEndpointEvent): number | null => {
+  const topLevelRelations = asRecord(event["m.relations"]);
+  const unsignedRelations = asRecord(asRecord(event.unsigned)?.["m.relations"]);
+  const contentRelations = asRecord(asRecord(event.content)?.["m.relations"]);
+
+  const threadSummary =
+    asRecord(topLevelRelations?.["m.thread"]) ??
+    asRecord(unsignedRelations?.["m.thread"]) ??
+    asRecord(contentRelations?.["m.thread"]);
+
+  return asInteger(threadSummary?.count);
 };
 
 const SELECTED_SPACE_STORAGE_KEY = "matricesbb.selected-space";
@@ -1590,6 +1618,7 @@ export class MatrixForumStore {
       senderId: asString(event.sender) ?? "@unknown:local",
       createdAt: asNumber(event.origin_server_ts) ?? 0,
       content: asRecord(event.content) ?? {},
+      replyCount: readThreadReplyCount(event),
     };
   }
 
@@ -1614,12 +1643,16 @@ export class MatrixForumStore {
 
       const rootEvent = sdkThread.rootEvent ?? sdkRoom.findEventById(sdkThread.id);
       if (rootEvent) {
+        const loadedReplyCount =
+          (sdkThread as unknown as { events?: unknown[] }).events?.filter(Boolean).length ?? 0;
+
         mergedRoots.set(sdkThread.id, {
           eventId: sdkThread.id,
           eventType: rootEvent.getType(),
           senderId: rootEvent.getSender() ?? "@unknown:local",
           createdAt: rootEvent.getTs(),
           content: rootEvent.getContent<Record<string, unknown>>() ?? {},
+          replyCount: loadedReplyCount,
         });
       } else {
         mergedRoots.set(sdkThread.id, {
@@ -1628,6 +1661,7 @@ export class MatrixForumStore {
           senderId: "@unknown:local",
           createdAt: 0,
           content: {},
+          replyCount: null,
         });
       }
     }

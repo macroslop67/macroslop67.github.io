@@ -100,7 +100,7 @@ export function SettingsPage() {
 
       saveConnectionConfig(parsedConfig);
       await connect(parsedConfig);
-      setNoticeMessage("Signed in successfully.");
+      setNoticeMessage("Signed in successfully for this browser session.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not complete sign-in.");
     } finally {
@@ -112,7 +112,10 @@ export function SettingsPage() {
     <section className="settings-page settings-page-single">
       <article className="settings-card auth-card">
         <h2>Log in</h2>
-        <p className="subtle-line">Use account credentials, or switch to token mode if needed.</p>
+        <p className="subtle-line">
+          Use account credentials, or switch to token mode if needed. Access tokens are stored for
+          this browser session only.
+        </p>
 
         {errorMessage ? <p className="status-banner status-banner-error">{errorMessage}</p> : null}
         {noticeMessage ? <p className="status-banner">{noticeMessage}</p> : null}
