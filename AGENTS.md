@@ -76,6 +76,7 @@ This file captures key product and architecture choices for MatricesBB.
 ## Chat Pane
 
 - Chats are a separate interface feature rendered as an expandable pane at the bottom-right.
+- When the chat pane is expanded, pressing `Escape` should collapse it and return focus to the chat toggle button.
 - Chat pane must show all joined non-space rooms, including rooms outside any selected space scope.
 - Encrypted rooms should be filtered out of chat lists when encryption state is detectable.default
 - No chat-specific data prefetch is allowed while the chat pane is collapsed.

@@ -19,6 +19,7 @@ import {
 
 const CHAT_COMPOSER_FORM_ID = "chatMessageComposer";
 const THREAD_INIT_COMPOSER_FORM_ID = "chatThreadInitComposer";
+const CHAT_PANE_SECTION_ID = "chatPaneSection";
 const DEFAULT_REACTION_EMOJIS = ["👍", "❤️", "😂", "🎉", "👀"];
 const CHAT_ROOMS_REFRESH_INTERVAL_MS = 15_000;
 const CHAT_MESSAGES_REFRESH_INTERVAL_MS = 4_000;
@@ -111,6 +112,8 @@ export function ChatPane() {
 
   const roomRequestGenerationRef = useRef(0);
   const messageRequestGenerationRef = useRef(0);
+  const chatPaneToggleRef = useRef<HTMLButtonElement | null>(null);
+  const chatPaneSectionRef = useRef<HTMLElement | null>(null);
 
   const currentUserId = state.config?.userId ?? null;
 
@@ -142,6 +145,18 @@ export function ChatPane() {
   const selectedRoom = selectedRoomId
     ? (chatRooms.find((room) => room.id === selectedRoomId) ?? null)
     : null;
+
+  const openChatPane = useCallback(() => {
+    setExpanded(true);
+  }, []);
+
+  const collapseChatPane = useCallback(() => {
+    setExpanded(false);
+
+    requestAnimationFrame(() => {
+      chatPaneToggleRef.current?.focus();
+    });
+  }, []);
 
   const refreshRooms = useCallback(() => {
     const requestGeneration = ++roomRequestGenerationRef.current;
@@ -283,6 +298,36 @@ export function ChatPane() {
       replaceMessages: true,
     });
   }, [expanded, refreshMessagesForRoom, selectedRoomId, state.config]);
+
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.key !== "Escape") {
+        return;
+      }
+
+      collapseChatPane();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [collapseChatPane, expanded]);
+
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      chatPaneSectionRef.current?.focus();
+    });
+  }, [expanded]);
 
   useEffect(() => {
     if (!expanded || !selectedRoomId || !state.config) {
@@ -541,10 +586,13 @@ export function ChatPane() {
     <div className="chat-pane-root">
       {!expanded ? (
         <button
+          ref={chatPaneToggleRef}
           type="button"
           className="chat-pane-toggle"
-          onClick={() => setExpanded(true)}
+          onClick={openChatPane}
           aria-label={t("chat.openPaneAria")}
+          aria-expanded={expanded}
+          aria-controls={CHAT_PANE_SECTION_ID}
         >
           {t("chat.chats")}
           {chatRooms.length > 0 ? <span>{chatRooms.length}</span> : ""}
@@ -552,25 +600,22 @@ export function ChatPane() {
       ) : null}
 
       {expanded ? (
-        <section className="chat-pane" aria-label={t("chat.chats")}>
-          {/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/prefer-tag-over-role */}
-          <header
-            className="chat-pane-header"
-            onClick={() => setExpanded(false)}
-            role="button"
-            aria-expanded={expanded}
-          >
+        <section
+          ref={chatPaneSectionRef}
+          id={CHAT_PANE_SECTION_ID}
+          className="chat-pane"
+          aria-label={t("chat.chats")}
+          aria-keyshortcuts="Escape"
+          tabIndex={-1}
+        >
+          <header className="chat-pane-header">
             <h3>{t("chat.chats")}</h3>
 
-            <div
-              className="chat-pane-header-actions"
-              onClick={(event) => event.stopPropagation()}
-              role="group"
-            >
+            <div className="chat-pane-header-actions" role="group">
               <button type="button" className="ghost-button" onClick={refreshRooms}>
                 {t("common.refresh")}
               </button>
-              <button type="button" className="ghost-button" onClick={() => setExpanded(false)}>
+              <button type="button" className="ghost-button" onClick={collapseChatPane}>
                 {t("chat.collapse")}
               </button>
             </div>

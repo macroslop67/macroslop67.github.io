@@ -1783,7 +1783,6 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
 }
 
 .chat-pane-header h3 {
