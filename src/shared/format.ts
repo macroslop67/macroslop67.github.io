@@ -1,7 +1,10 @@
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, type Locale } from "date-fns";
 
-export const formatRelativeTimestamp = (timestamp: number): string =>
-  formatDistanceToNow(timestamp, { addSuffix: true });
+export const formatRelativeTimestamp = (timestamp: number, locale?: Locale): string =>
+  formatDistanceToNow(timestamp, {
+    addSuffix: true,
+    ...(locale ? { locale } : {}),
+  });
 
 export const compactText = (value: string, maxLength: number): string => {
   const normalized = value.replace(/\s+/g, " ").trim();

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import {
   type ThemePreference,
   clearConnectionConfig,
@@ -11,13 +12,6 @@ import { avatarInitials, shortUserId } from "../shared/format";
 import { RelativeTime } from "../shared/RelativeTime";
 import { ChatPane } from "../features/chats/ChatPane";
 
-const statusLabelByState = {
-  idle: "⚪ Idle",
-  connecting: "🟡 Connecting",
-  live: "🟢 Live sync",
-  error: "🔴 Sync error",
-} as const;
-
 const readSystemThemePreference = (): ThemePreference => {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return "light";
@@ -27,6 +21,7 @@ const readSystemThemePreference = (): ThemePreference => {
 };
 
 export function AppShell() {
+  const { t, i18n } = useTranslation();
   const { state, disconnect } = useMatrixForum();
   const totalUnread = state.snapshot.groups.reduce((total, group) => total + group.unreadCount, 0);
   const totalMentions = state.snapshot.groups.reduce(
@@ -34,8 +29,15 @@ export function AppShell() {
     0,
   );
   const currentUserId = state.config?.userId ?? null;
-  const currentUserLabel = currentUserId ? shortUserId(currentUserId) : "User";
+  const currentUserLabel = currentUserId ? shortUserId(currentUserId) : t("appShell.userFallback");
   const currentUserInitials = avatarInitials(currentUserLabel, currentUserId ?? undefined);
+  const statusLabelByState = {
+    idle: `⚪ ${t("appShell.status.idle")}`,
+    connecting: `🟡 ${t("appShell.status.connecting")}`,
+    live: `🟢 ${t("appShell.status.live")}`,
+    error: `🔴 ${t("appShell.status.error")}`,
+  } as const;
+  const currentLanguage = i18n.resolvedLanguage?.startsWith("pl") ? "pl" : "en";
 
   const [isAccountPopoverOpen, setIsAccountPopoverOpen] = useState(false);
   const [themePreference, setThemePreference] = useState<ThemePreference | null>(() =>
@@ -122,6 +124,10 @@ export function AppShell() {
     saveThemePreference(nextThemePreference);
   };
 
+  const changeLanguage = (nextLanguage: string) => {
+    void i18n.changeLanguage(nextLanguage);
+  };
+
   return (
     <>
       <div className="app-shell">
@@ -148,7 +154,11 @@ export function AppShell() {
                 </button>
 
                 {isAccountPopoverOpen ? (
-                  <div className="account-popover" role="menu" aria-label="Account">
+                  <div
+                    className="account-popover"
+                    role="menu"
+                    aria-label={t("appShell.accountMenu")}
+                  >
                     <div className="account-popover-user">
                       <span className="account-avatar account-avatar-fallback">
                         {currentUserInitials}
@@ -164,24 +174,27 @@ export function AppShell() {
                       <span>
                         {state.snapshot.updatedAt > 0 ? (
                           <>
-                            Updated <RelativeTime timestamp={state.snapshot.updatedAt} />
+                            {t("common.updated")}{" "}
+                            <RelativeTime timestamp={state.snapshot.updatedAt} />
                           </>
                         ) : (
-                          "No sync yet"
+                          t("common.noSyncYet")
                         )}
                       </span>
                     </div>
 
                     <div className="sync-pill">
-                      {totalUnread} unread
-                      <span>{totalMentions > 0 ? `${totalMentions} mentions` : "No mentions"}</span>
+                      {t("count.unread", { count: totalUnread })}
+                      <span>{t("count.mention", { count: totalMentions })}</span>
                     </div>
 
                     <div className="account-popover-row">
                       <div>
-                        <strong>Dark mode</strong>
+                        <strong>{t("appShell.darkMode")}</strong>
                         <div className="inline-note">
-                          {themePreference ? "Saved for this browser" : "Using system preference"}
+                          {themePreference
+                            ? t("appShell.darkModeSaved")
+                            : t("appShell.darkModeSystem")}
                         </div>
                       </div>
 
@@ -189,15 +202,30 @@ export function AppShell() {
                         type="button"
                         className={`theme-toggle ${resolvedThemePreference === "dark" ? "theme-toggle-active" : ""}`}
                         aria-pressed={resolvedThemePreference === "dark"}
-                        aria-label="Toggle dark mode"
+                        aria-label={t("appShell.themeToggleAria")}
                         onClick={toggleThemePreference}
                       >
                         <span className="theme-toggle-knob" />
                       </button>
                     </div>
 
+                    <div className="account-popover-row">
+                      <label htmlFor="languageSelect">
+                        <strong>{t("appShell.language")}</strong>
+                      </label>
+                      <select
+                        id="languageSelect"
+                        className="text-input account-language-select"
+                        value={currentLanguage}
+                        onChange={(event) => changeLanguage(event.target.value)}
+                      >
+                        <option value="en">{t("appShell.languageEnglish")}</option>
+                        <option value="pl">{t("appShell.languagePolish")}</option>
+                      </select>
+                    </div>
+
                     <button type="button" className="ghost-button" onClick={handleLogout}>
-                      Log out
+                      {t("appShell.logOut")}
                     </button>
                   </div>
                 ) : null}

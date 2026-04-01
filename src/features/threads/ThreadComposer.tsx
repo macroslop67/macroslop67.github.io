@@ -20,10 +20,12 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { type PollDraft } from "../../matrix/types";
 
 export interface ComposerPayload {
@@ -48,6 +50,14 @@ type ThreadComposerProps = {
   onCancel?: () => void;
 };
 
+const readCurrentTheme = (): "light" | "dark" => {
+  if (typeof document === "undefined") {
+    return "light";
+  }
+
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+};
+
 export function ThreadComposer({
   formId,
   heading,
@@ -62,6 +72,7 @@ export function ThreadComposer({
   onSubmit,
   onCancel,
 }: ThreadComposerProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState(initialTitle);
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -70,7 +81,25 @@ export function ThreadComposer({
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollMaxSelections, setPollMaxSelections] = useState(1);
   const [editorKey, setEditorKey] = useState(0);
+  const [theme, setTheme] = useState<"light" | "dark">(readCurrentTheme);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const rootElement = document.documentElement;
+    const updateTheme = () => {
+      setTheme(rootElement.dataset.theme === "dark" ? "dark" : "light");
+    };
+
+    updateTheme();
+
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(rootElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   const editorPlugins = useMemo(
     () => [
@@ -212,13 +241,13 @@ export function ThreadComposer({
 
       {withTitle ? (
         <div className="field-group">
-          <label htmlFor="threadComposerTitle">Title</label>
+          <label htmlFor="threadComposerTitle">{t("composer.titleLabel")}</label>
           <input
             id="threadComposerTitle"
             className="text-input"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Write a concise, forum-style title"
+            placeholder={t("composer.titlePlaceholder")}
           />
         </div>
       ) : null}
@@ -231,14 +260,14 @@ export function ThreadComposer({
             value={markdown}
             onChange={(event) => setMarkdown(event.target.value)}
             rows={1}
-            placeholder="Write a message (Markdown supported)"
+            placeholder={t("composer.compactPlaceholder")}
           />
         </div>
       ) : (
         <div className="editor-shell">
           <MDXEditor
             key={editorKey}
-            className="mdx-editor"
+            className={`mdx-editor ${theme === "dark" ? "dark-theme" : "light-theme"}`}
             contentEditableClassName="mdx-editor-content"
             markdown={markdown}
             onChange={setMarkdown}
@@ -261,7 +290,7 @@ export function ThreadComposer({
         />
       ) : (
         <div className="field-group">
-          <label htmlFor={attachmentInputId}>Attachments</label>
+          <label htmlFor={attachmentInputId}>{t("composer.attachmentsLabel")}</label>
           <input
             id={attachmentInputId}
             className="text-input"
@@ -281,7 +310,7 @@ export function ThreadComposer({
             <div key={`${attachment.name}-${attachment.size}-${attachment.lastModified}`}>
               <span>{attachment.name}</span>
               <button type="button" className="link-action" onClick={() => removeAttachment(index)}>
-                Remove
+                {t("common.remove")}
               </button>
             </div>
           ))}
@@ -295,25 +324,25 @@ export function ThreadComposer({
             checked={pollEnabled}
             onChange={(event) => setPollEnabled(event.target.checked)}
           />
-          Add poll
+          {t("composer.addPoll")}
         </label>
       )}
 
       {pollEnabled ? (
         <div className="poll-builder">
           <div className="field-group">
-            <label htmlFor="pollQuestion">Poll question</label>
+            <label htmlFor="pollQuestion">{t("composer.pollQuestionLabel")}</label>
             <input
               id="pollQuestion"
               className="text-input"
               value={pollQuestion}
               onChange={(event) => setPollQuestion(event.target.value)}
-              placeholder="What should the group decide?"
+              placeholder={t("composer.pollQuestionPlaceholder")}
             />
           </div>
 
           <div className="field-group">
-            <label htmlFor="pollMaxSelections">Max selections</label>
+            <label htmlFor="pollMaxSelections">{t("composer.maxSelectionsLabel")}</label>
             <input
               id="pollMaxSelections"
               className="number-input"
@@ -333,7 +362,7 @@ export function ThreadComposer({
                   className="text-input"
                   value={option}
                   onChange={(event) => updatePollOption(index, event.target.value)}
-                  placeholder={`Option ${index + 1}`}
+                  placeholder={t("composer.optionPlaceholder", { index: index + 1 })}
                 />
                 <button
                   type="button"
@@ -341,14 +370,14 @@ export function ThreadComposer({
                   onClick={() => removePollOption(index)}
                   disabled={pollOptions.length <= 2}
                 >
-                  Remove
+                  {t("common.remove")}
                 </button>
               </div>
             ))}
           </div>
 
           <button type="button" className="ghost-button" onClick={addPollOption}>
-            Add option
+            {t("composer.addOption")}
           </button>
         </div>
       ) : null}
@@ -356,7 +385,7 @@ export function ThreadComposer({
       <div className="composer-actions">
         {onCancel ? (
           <button className="ghost-button" type="button" onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </button>
         ) : null}
 
@@ -368,7 +397,7 @@ export function ThreadComposer({
               onClick={triggerAttachmentPicker}
               title="Upload attachments"
             >
-              Upload
+              {t("common.upload")}
             </button>
             <button
               type="button"
@@ -376,16 +405,16 @@ export function ThreadComposer({
               onClick={() => setPollEnabled((enabled) => !enabled)}
               title="Toggle poll builder"
             >
-              Poll
+              {t("common.poll")}
             </button>
 
             <button className="solid-button" type="submit" disabled={busy || !canSubmit}>
-              {busy ? "Sending..." : submitLabel}
+              {busy ? t("composer.sending") : submitLabel}
             </button>
           </div>
         ) : (
           <button className="solid-button" type="submit" disabled={busy || !canSubmit}>
-            {busy ? "Sending..." : submitLabel}
+            {busy ? t("composer.sending") : submitLabel}
           </button>
         )}
       </div>

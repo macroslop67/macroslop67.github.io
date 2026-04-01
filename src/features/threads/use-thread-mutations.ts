@@ -4,6 +4,7 @@ import {
   type PollDraft,
   type SendChatMessagePayload,
   type StartThreadFromChatPayload,
+  type VoteInPollPayload,
 } from "../../matrix/types";
 
 export interface CreateThreadPayload {
@@ -40,6 +41,8 @@ export interface RedactPostPayload {
   eventId: string;
   reason?: string;
 }
+
+export type VoteInPollMutationPayload = VoteInPollPayload;
 
 export type PostChatMessagePayload = SendChatMessagePayload;
 export type StartThreadFromChatMutationPayload = StartThreadFromChatPayload;
@@ -133,6 +136,18 @@ export const useStartThreadFromChatMutation = () => {
 
   return useMutation({
     mutationFn: async (payload: StartThreadFromChatMutationPayload) => startThreadFromChat(payload),
+    onSuccess: () => {
+      void refresh();
+    },
+  });
+};
+
+export const useVoteInPollMutation = () => {
+  const { voteInPoll, refresh } = useMatrixForum();
+
+  return useMutation({
+    mutationFn: async (payload: VoteInPollMutationPayload) =>
+      voteInPoll(payload.roomId, payload.pollEventId, payload.answerIds),
     onSuccess: () => {
       void refresh();
     },

@@ -18,9 +18,11 @@
     "@tanstack/react-virtual": "^3.13.23",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "i18next": "^26.0.3",
     "matrix-js-sdk": "^41.3.0-rc.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-i18next": "^17.0.2",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "zod": "^4.3.6"

@@ -73,5 +73,6 @@ export function useMatrixForum() {
     loadChatMessages: store.loadChatMessages,
     postChatMessage: store.postChatMessage,
     startThreadFromChat: store.startThreadFromChat,
+    voteInPoll: store.voteInPoll,
   };
 }

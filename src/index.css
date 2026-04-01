@@ -37,6 +37,24 @@
   --border: rgba(164, 186, 205, 0.3);
   --danger: #f28888;
   --shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+
+  .space-selector-wrap,
+  .space-selector {
+    background: rgba(28, 36, 45, 0.92);
+  }
+
+  .space-selector-label {
+    color: var(--ink-subtle);
+  }
+
+  .space-selector {
+    color: var(--ink);
+    border-left-color: var(--border);
+  }
+
+  .space-selector:focus {
+    border-color: rgba(99, 200, 173, 0.45);
+  }
 }
 
 * {
@@ -834,6 +852,7 @@ body::before {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   color: var(--ink-subtle);
   font-size: 12px;
   padding-bottom: 6px;
@@ -1180,6 +1199,42 @@ button:disabled {
   min-height: 150px;
 }
 
+.mdx-editor.dark-theme,
+.mdx-editor.light-theme {
+  color: var(--ink);
+}
+
+.mdx-editor.dark-theme {
+  background: rgba(28, 36, 45, 0.9);
+}
+
+.mdx-editor.dark-theme .mdx-editor-content {
+  color: var(--ink);
+}
+
+.mdx-editor.dark-theme
+  .mdx-editor-content
+  :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, figcaption) {
+  color: var(--ink);
+}
+
+.mdx-editor.dark-theme .mdx-editor-content :is(a) {
+  color: var(--accent);
+}
+
+.mdx-editor.dark-theme .mdx-editor-content :is(code, pre) {
+  background: rgba(10, 14, 18, 0.55);
+  color: var(--ink);
+}
+
+.mdx-editor.dark-theme .mdx-editor-content blockquote {
+  border-left-color: rgba(99, 200, 173, 0.36);
+}
+
+.mdx-editor.dark-theme .mdx-editor-content ::selection {
+  background: rgba(99, 200, 173, 0.3);
+}
+
 .mdx-editor-content {
   font-size: 15px;
 }
@@ -1399,6 +1454,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .post-anchor-link {
@@ -2136,6 +2192,7 @@ button:disabled {
     border-bottom: 1px solid var(--border);
     flex-direction: row;
     justify-content: flex-start;
+    flex-wrap: wrap;
     text-align: left;
   }
 

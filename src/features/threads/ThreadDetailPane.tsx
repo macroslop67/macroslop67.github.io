@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMatrixForum } from "../../matrix/context";
 import {
   type ForumAttachment,
@@ -17,6 +18,7 @@ import {
   useReactToPostMutation,
   useRedactPostMutation,
   useReplyToThreadMutation,
+  useVoteInPollMutation,
 } from "./use-thread-mutations";
 
 const DEFAULT_REACTION_EMOJIS = ["👍", "❤️", "😂", "🎉", "👀"];
@@ -44,11 +46,13 @@ type ThreadDetailPaneProps = {
 };
 
 export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
+  const { t } = useTranslation();
   const { state } = useMatrixForum();
   const replyMutation = useReplyToThreadMutation();
   const reactionMutation = useReactToPostMutation();
   const editMutation = useEditPostMutation();
   const redactMutation = useRedactPostMutation();
+  const votePollMutation = useVoteInPollMutation();
 
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -279,6 +283,18 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
     });
   };
 
+  const voteInPoll = (post: ForumPost, answerIds: string[]) => {
+    if (!post.poll || answerIds.length === 0) {
+      return;
+    }
+
+    void votePollMutation.mutateAsync({
+      roomId: post.roomId,
+      pollEventId: post.eventId,
+      answerIds,
+    });
+  };
+
   const startEditingPost = (post: ForumPost) => {
     setEditingPostId(post.eventId);
     setEditingMarkdown(post.body);
@@ -309,7 +325,7 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
   };
 
   const deletePost = (post: ForumPost) => {
-    if (!window.confirm("Delete this message?")) {
+    if (!window.confirm(t("threadDetail.deleteConfirm"))) {
       return;
     }
 
@@ -323,12 +339,12 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
     <section className="thread-detail">
       <header className="detail-top">
         <p className="detail-subline">
-          #{thread.groupName} · {thread.replyCount} replies · last activity{" "}
-          <RelativeTime timestamp={thread.lastActivityAt} />
+          #{thread.groupName} · {t("count.reply", { count: thread.replyCount })} ·{" "}
+          {t("common.lastActivity")} <RelativeTime timestamp={thread.lastActivityAt} />
         </p>
 
         <button className="reply-button" type="button" onClick={() => openReplyComposer(null)}>
-          Reply to thread
+          {t("threadDetail.replyToThread")}
         </button>
       </header>
 
@@ -351,6 +367,8 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
               onDelete={() => deletePost(thread.root)}
               onReply={() => openReplyComposer(null)}
               onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
+              onVotePoll={(answerIds) => voteInPoll(thread.root, answerIds)}
+              pollVoteBusy={votePollMutation.isPending}
             />
 
             {replyForest.map((node) => (
@@ -373,6 +391,8 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
                 canDeletePost={canDeletePost}
                 onReply={(eventId) => openReplyComposer(eventId)}
                 onReact={reactToPost}
+                onVotePoll={voteInPoll}
+                pollVoteBusy={votePollMutation.isPending}
                 onFocusReplyTarget={focusParentPost}
               />
             ))}
@@ -395,6 +415,8 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
               onDelete={() => deletePost(thread.root)}
               onReply={() => openReplyComposer(null)}
               onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
+              onVotePoll={(answerIds) => voteInPoll(thread.root, answerIds)}
+              pollVoteBusy={votePollMutation.isPending}
             />
 
             {thread.replies.map((reply) => {
@@ -421,6 +443,8 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
                   onDelete={() => deletePost(reply)}
                   onReply={() => openReplyComposer(reply.eventId)}
                   onReact={(emoji) => reactToPost(reply.eventId, emoji)}
+                  onVotePoll={(answerIds) => voteInPoll(reply, answerIds)}
+                  pollVoteBusy={votePollMutation.isPending}
                 />
               );
             })}
@@ -444,20 +468,20 @@ export function ThreadDetailPane({ thread, viewMode }: ThreadDetailPaneProps) {
             onDelete={() => deletePost(thread.root)}
             onReply={() => openReplyComposer(null)}
             onReact={(emoji) => reactToPost(thread.root.eventId, emoji)}
+            onVotePoll={(answerIds) => voteInPoll(thread.root, answerIds)}
+            pollVoteBusy={votePollMutation.isPending}
           />
 
           <article className="post-card">
-            <p className="inline-note">
-              No replies yet. Start the discussion with the editor below.
-            </p>
+            <p className="inline-note">{t("threadDetail.noRepliesYet")}</p>
           </article>
         </section>
       )}
 
       <ThreadComposer
         formId={REPLY_COMPOSER_FORM_ID}
-        heading="Post reply"
-        submitLabel="Publish reply"
+        heading={t("threadDetail.postReply")}
+        submitLabel={t("threadDetail.publishReply")}
         busy={replyMutation.isPending}
         contextPreview={
           replyTarget ? (
@@ -493,6 +517,8 @@ type ForumStylePostProps = {
   onDelete: () => void;
   onReply: () => void;
   onReact: (emoji: string) => void;
+  onVotePoll: (answerIds: string[]) => void;
+  pollVoteBusy: boolean;
 };
 
 function ForumStylePost({
@@ -514,7 +540,11 @@ function ForumStylePost({
   onDelete,
   onReply,
   onReact,
+  onVotePoll,
+  pollVoteBusy,
 }: ForumStylePostProps) {
+  const { t } = useTranslation();
+
   return (
     <article
       className={`forum-post ${isHighlighted ? "forum-post-highlight" : ""}`}
@@ -537,7 +567,9 @@ function ForumStylePost({
 
         <strong className="forum-user-name">{post.authorDisplayName}</strong>
         <span className="forum-user-handle">@{shortUserId(post.authorId)}</span>
-        {threadStarter ? <span className="forum-user-badge">Thread starter</span> : null}
+        {threadStarter ? (
+          <span className="forum-user-badge">{t("common.threadStarter")}</span>
+        ) : null}
       </aside>
 
       <div className="forum-post-main">
@@ -570,6 +602,8 @@ function ForumStylePost({
           isEditing={isEditing}
           editingMarkdown={editingMarkdown}
           onEditMarkdownChange={onEditMarkdownChange}
+          onVote={onVotePoll}
+          pollVoteBusy={pollVoteBusy}
         />
 
         <PostReactions post={post} onReact={onReact} />
@@ -599,7 +633,11 @@ function TreeStylePost({
   onDelete,
   onReply,
   onReact,
+  onVotePoll,
+  pollVoteBusy,
 }: TreeStylePostProps) {
+  const { t } = useTranslation();
+
   return (
     <article
       className={`post-card ${isHighlighted ? "post-card-highlight" : ""}`}
@@ -609,7 +647,9 @@ function TreeStylePost({
       <header className="post-meta">
         <span className="reply-author-name">
           {post.authorDisplayName}
-          {threadStarter ? <span className="forum-user-badge">Thread starter</span> : null}
+          {threadStarter ? (
+            <span className="forum-user-badge">{t("common.threadStarter")}</span>
+          ) : null}
         </span>
         <PostTimelineMeta
           post={post}
@@ -625,6 +665,8 @@ function TreeStylePost({
         isEditing={isEditing}
         editingMarkdown={editingMarkdown}
         onEditMarkdownChange={onEditMarkdownChange}
+        onVote={onVotePoll}
+        pollVoteBusy={pollVoteBusy}
       />
 
       <PostActions
@@ -662,6 +704,8 @@ type ReplyTreeNodeProps = {
   onDelete: (post: ForumPost) => void;
   onReply: (eventId: string) => void;
   onReact: (eventId: string, emoji: string) => void;
+  onVotePoll: (post: ForumPost, answerIds: string[]) => void;
+  pollVoteBusy: boolean;
   onFocusReplyTarget: (eventId: string) => void;
 };
 
@@ -683,6 +727,8 @@ function ReplyTreeNode({
   onDelete,
   onReply,
   onReact,
+  onVotePoll,
+  pollVoteBusy,
   onFocusReplyTarget,
 }: ReplyTreeNodeProps) {
   const isEditing = editingPostId === node.reply.eventId;
@@ -714,6 +760,8 @@ function ReplyTreeNode({
         onDelete={() => onDelete(node.reply)}
         onReply={() => onReply(node.reply.eventId)}
         onReact={(emoji) => onReact(node.reply.eventId, emoji)}
+        onVotePoll={(answerIds) => onVotePoll(node.reply, answerIds)}
+        pollVoteBusy={pollVoteBusy}
       />
 
       {node.children.length > 0 ? (
@@ -738,6 +786,8 @@ function ReplyTreeNode({
               onDelete={onDelete}
               onReply={onReply}
               onReact={onReact}
+              onVotePoll={onVotePoll}
+              pollVoteBusy={pollVoteBusy}
               onFocusReplyTarget={onFocusReplyTarget}
             />
           ))}
@@ -754,21 +804,23 @@ type ReplyParentPreviewProps = {
 };
 
 function ReplyParentPreview({ replyTarget, onFocusParent, onClear }: ReplyParentPreviewProps) {
+  const { t } = useTranslation();
   const previewText =
     replyTarget.body ||
     replyTarget.poll?.question ||
     replyTarget.attachments[0]?.name ||
-    "(no text content)";
+    t("common.noTextContent");
 
   return (
     <div className="reply-target">
       <button className="link-action" type="button" onClick={onFocusParent}>
-        Replying to {replyTarget.authorDisplayName}: “{previewText.slice(0, 80)}
+        {t("threadDetail.replyingToPreview", { author: replyTarget.authorDisplayName })}: “
+        {previewText.slice(0, 80)}
         {previewText.length > 80 ? "..." : ""}”
       </button>
 
       <button className="link-action" type="button" onClick={onClear}>
-        Clear
+        {t("common.clear")}
       </button>
     </div>
   );
@@ -789,6 +841,7 @@ function PostTimelineMeta({
   replyToIndex = null,
   onFocusReplyTarget = null,
 }: PostTimelineMetaProps) {
+  const { t } = useTranslation();
   const anchorId = getPostAnchorId(post.eventId);
 
   const handleAnchorClick = () => {
@@ -810,7 +863,7 @@ function PostTimelineMeta({
             className="post-reply-reference"
             onClick={() => onFocusReplyTarget(replyToEventId)}
           >
-            In reply to #{replyToIndex}
+            {t("threadDetail.inReplyTo", { index: replyToIndex })}
           </button>
         </>
       ) : null}
@@ -820,7 +873,7 @@ function PostTimelineMeta({
         <>
           <span>·</span>
           <span>
-            edited <RelativeTime timestamp={post.editedAt} />
+            {t("common.edited")} <RelativeTime timestamp={post.editedAt} />
           </span>
         </>
       ) : null}
@@ -834,6 +887,7 @@ type PostReactionsProps = {
 };
 
 function PostReactions({ post, onReact }: PostReactionsProps) {
+  const { t } = useTranslation();
   const usedEmoji = new Set(post.reactions.map((reaction) => reaction.key));
   const quickEmoji = DEFAULT_REACTION_EMOJIS.filter((emoji) => !usedEmoji.has(emoji));
 
@@ -849,7 +903,9 @@ function PostReactions({ post, onReact }: PostReactionsProps) {
           type="button"
           className={`reaction-chip ${reaction.reactedByCurrentUser ? "reaction-chip-active" : ""}`}
           onClick={() => onReact(reaction.key)}
-          title={reaction.reactedByCurrentUser ? "Remove reaction" : "Add reaction"}
+          title={
+            reaction.reactedByCurrentUser ? t("common.removeReaction") : t("common.addReaction")
+          }
         >
           {reaction.key} <span>{reaction.count}</span>
         </button>
@@ -861,7 +917,7 @@ function PostReactions({ post, onReact }: PostReactionsProps) {
           type="button"
           className="reaction-chip reaction-chip-add"
           onClick={() => onReact(emoji)}
-          title="Add reaction"
+          title={t("common.addReaction")}
         >
           {emoji}
         </button>
@@ -875,10 +931,19 @@ type PostContentProps = {
   isEditing: boolean;
   editingMarkdown: string;
   onEditMarkdownChange: (value: string) => void;
+  onVote: (answerIds: string[]) => void;
+  pollVoteBusy: boolean;
 };
 
-function PostContent({ post, isEditing, editingMarkdown, onEditMarkdownChange }: PostContentProps) {
-  const shouldRenderBody = hasRenderableBody(post.body, post.attachments);
+function PostContent({
+  post,
+  isEditing,
+  editingMarkdown,
+  onEditMarkdownChange,
+  onVote,
+  pollVoteBusy,
+}: PostContentProps) {
+  const shouldRenderBody = hasRenderableBody(post.body, post.attachments) && !post.poll;
 
   return (
     <>
@@ -894,7 +959,7 @@ function PostContent({ post, isEditing, editingMarkdown, onEditMarkdownChange }:
       ) : null}
 
       {post.attachments.length > 0 ? <PostAttachments post={post} /> : null}
-      {post.poll ? <PostPoll post={post} /> : null}
+      {post.poll ? <PostPoll post={post} onVote={onVote} busy={pollVoteBusy} /> : null}
     </>
   );
 }
@@ -926,33 +991,35 @@ function PostActions({
   onReact,
   showReactionsInActions,
 }: PostActionsProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="post-action-row">
       <div className="post-action-primary">
         <button className="reply-button" type="button" onClick={onReply}>
-          Reply
+          {t("common.reply")}
         </button>
 
         {canEdit && !isEditing ? (
           <button className="reply-button" type="button" onClick={onStartEdit}>
-            Edit
+            {t("common.edit")}
           </button>
         ) : null}
 
         {isEditing ? (
           <>
             <button className="reply-button" type="button" onClick={onSaveEdit}>
-              Save
+              {t("common.save")}
             </button>
             <button className="reply-button" type="button" onClick={onCancelEdit}>
-              Cancel
+              {t("common.cancel")}
             </button>
           </>
         ) : null}
 
         {canDelete ? (
           <button className="reply-button" type="button" onClick={onDelete}>
-            Delete
+            {t("common.delete")}
           </button>
         ) : null}
       </div>
@@ -963,6 +1030,8 @@ function PostActions({
 }
 
 function PostAttachments({ post }: { post: ForumPost }) {
+  const { t } = useTranslation();
+
   return (
     <div className="post-attachments">
       {post.attachments.map((attachment) => (
@@ -986,7 +1055,7 @@ function PostAttachments({ post }: { post: ForumPost }) {
           </a>
 
           <span className="inline-note">
-            {attachment.mimeType ?? "attachment"}
+            {attachment.mimeType ?? t("common.attachment")}
             {attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} KB` : ""}
           </span>
         </div>
@@ -995,22 +1064,91 @@ function PostAttachments({ post }: { post: ForumPost }) {
   );
 }
 
-function PostPoll({ post }: { post: ForumPost }) {
+function PostPoll({
+  post,
+  onVote,
+  busy,
+}: {
+  post: ForumPost;
+  onVote: (answerIds: string[]) => void;
+  busy: boolean;
+}) {
   if (!post.poll) {
     return null;
   }
 
+  const { t } = useTranslation();
+  const poll = post.poll;
+
+  const selectedFromServer = useMemo(
+    () => poll.options.filter((option) => option.selectedByCurrentUser).map((option) => option.id),
+    [poll.options],
+  );
+  const selectedFromServerKey = selectedFromServer.join("|");
+
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(selectedFromServer);
+
+  useEffect(() => {
+    setSelectedOptionIds(selectedFromServer);
+  }, [post.eventId, selectedFromServer, selectedFromServerKey]);
+
+  const toggleOption = (optionId: string) => {
+    setSelectedOptionIds((previousOptionIds) => {
+      const alreadySelected = previousOptionIds.includes(optionId);
+      if (alreadySelected) {
+        return previousOptionIds.filter((id) => id !== optionId);
+      }
+
+      if (previousOptionIds.length >= poll.maxSelections) {
+        if (poll.maxSelections === 1) {
+          return [optionId];
+        }
+
+        return previousOptionIds;
+      }
+
+      return [...previousOptionIds, optionId];
+    });
+  };
+
+  const submitVote = () => {
+    if (selectedOptionIds.length === 0 || busy) {
+      return;
+    }
+
+    onVote(selectedOptionIds);
+  };
+
   return (
     <section className="post-poll">
-      <h4>{post.poll.question}</h4>
+      <h4>{poll.question}</h4>
       <ul>
-        {post.poll.options.map((option) => (
+        {poll.options.map((option) => (
           <li key={`${post.eventId}-${option.id}`}>
-            <span>{option.label}</span>
-            <span className="inline-note">{option.voteCount} vote(s)</span>
+            <button
+              type="button"
+              className={`reply-button ${selectedOptionIds.includes(option.id) ? "reaction-chip-active" : ""}`}
+              onClick={() => toggleOption(option.id)}
+            >
+              {option.label}
+            </button>
+            <span className="inline-note">{t("count.vote", { count: option.voteCount })}</span>
           </li>
         ))}
       </ul>
+      <div className="chat-message-actions">
+        <span className="inline-note">
+          {t("poll.maxSelections", { count: poll.maxSelections })}
+        </span>
+        <button
+          type="button"
+          className="reply-button"
+          onClick={submitVote}
+          disabled={busy || selectedOptionIds.length === 0}
+        >
+          {busy ? t("poll.votingAction") : t("poll.voteAction")}
+        </button>
+      </div>
     </section>
   );
 }

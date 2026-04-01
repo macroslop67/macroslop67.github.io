@@ -1,18 +1,13 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Navigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { useMatrixForum } from "../../matrix/context";
 import { DEFAULT_INITIAL_SYNC_LIMIT } from "../../matrix/constants";
 import { acquireTokenWithPassword } from "./auth-bootstrap";
 import { createDefaultDraft, parseConnectionDraft, saveConnectionConfig } from "./settings-storage";
 
-const statusMessageByState = {
-  idle: "No active Matrix session.",
-  connecting: "Signing in and synchronizing...",
-  live: "Signed in and receiving updates.",
-  error: "Sign-in failed. Check homeserver and credentials.",
-} as const;
-
 export function SettingsPage() {
+  const { t } = useTranslation();
   const { state, connect } = useMatrixForum();
   const [draft, setDraft] = useState(() => createDefaultDraft(state.config));
   const [loginUser, setLoginUser] = useState(state.config?.userId ?? "");
@@ -55,11 +50,11 @@ export function SettingsPage() {
         const userId = draft.userId.trim() || fallbackUserId;
 
         if (!accessToken) {
-          throw new Error("Access token is required in token mode.");
+          throw new Error(t("settings.tokenRequired"));
         }
 
         if (!userId) {
-          throw new Error("Matrix user ID is required in token mode.");
+          throw new Error(t("settings.matrixUserRequired"));
         }
 
         parsedConfig = parseConnectionDraft({
@@ -70,11 +65,11 @@ export function SettingsPage() {
         });
       } else {
         if (!loginUser.trim()) {
-          throw new Error("Login user is required.");
+          throw new Error(t("settings.userRequired"));
         }
 
         if (!password.trim()) {
-          throw new Error("Password is required.");
+          throw new Error(t("settings.passwordRequired"));
         }
 
         const bootstrap = await acquireTokenWithPassword({
@@ -100,29 +95,33 @@ export function SettingsPage() {
 
       saveConnectionConfig(parsedConfig);
       await connect(parsedConfig);
-      setNoticeMessage("Signed in successfully for this browser session.");
+      setNoticeMessage(t("settings.loggedInNotice"));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Could not complete sign-in.");
+      setErrorMessage(error instanceof Error ? error.message : t("settings.loginFailed"));
     } finally {
       setSaving(false);
     }
   };
 
+  const statusMessageByState = {
+    idle: t("settings.status.idle"),
+    connecting: t("settings.status.connecting"),
+    live: t("settings.status.live"),
+    error: t("settings.status.error"),
+  } as const;
+
   return (
     <section className="settings-page settings-page-single">
       <article className="settings-card auth-card">
-        <h2>Log in</h2>
-        <p className="subtle-line">
-          Use account credentials, or switch to token mode if needed. Access tokens are stored for
-          this browser session only.
-        </p>
+        <h2>{t("settings.title")}</h2>
+        <p className="subtle-line">{t("settings.intro")}</p>
 
         {errorMessage ? <p className="status-banner status-banner-error">{errorMessage}</p> : null}
         {noticeMessage ? <p className="status-banner">{noticeMessage}</p> : null}
 
         <form className="settings-form" onSubmit={handleSubmit}>
           <div className="field-group">
-            <label htmlFor="homeserverUrl">Homeserver URL</label>
+            <label htmlFor="homeserverUrl">{t("settings.homeserverUrl")}</label>
             <input
               id="homeserverUrl"
               className="text-input"
@@ -134,7 +133,7 @@ export function SettingsPage() {
           </div>
 
           <div className="field-group">
-            <label htmlFor="loginUser">User</label>
+            <label htmlFor="loginUser">{t("settings.user")}</label>
             <input
               id="loginUser"
               className="text-input"
@@ -146,7 +145,7 @@ export function SettingsPage() {
           </div>
 
           <div className="field-group">
-            <label htmlFor="loginPassword">Password</label>
+            <label htmlFor="loginPassword">{t("settings.password")}</label>
             <input
               id="loginPassword"
               className="text-input"
@@ -165,13 +164,13 @@ export function SettingsPage() {
               checked={useAccessTokenMode}
               onChange={(event) => setUseAccessTokenMode(event.target.checked)}
             />
-            Use access token instead of password
+            {t("settings.useAccessToken")}
           </label>
 
           {useAccessTokenMode ? (
             <div className="token-mode-grid">
               <div className="field-group">
-                <label htmlFor="tokenUserId">Matrix User ID</label>
+                <label htmlFor="tokenUserId">{t("settings.matrixUserId")}</label>
                 <input
                   id="tokenUserId"
                   className="text-input"
@@ -182,7 +181,7 @@ export function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label htmlFor="tokenValue">Access Token</label>
+                <label htmlFor="tokenValue">{t("settings.accessToken")}</label>
                 <input
                   id="tokenValue"
                   className="text-input"
@@ -197,7 +196,7 @@ export function SettingsPage() {
 
           <div className="settings-actions">
             <button className="solid-button" type="submit" disabled={saving}>
-              {saving ? "Logging in..." : "Log in"}
+              {saving ? t("settings.loggingIn") : t("composer.login")}
             </button>
 
             <span className="status-line">{statusMessageByState[state.status]}</span>

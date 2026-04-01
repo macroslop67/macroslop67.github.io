@@ -45,6 +45,7 @@ type ForumPollOption = {
   id: string;
   label: string;
   voteCount: number;
+  selectedByCurrentUser: boolean;
 };
 
 type ForumPoll = {
@@ -102,6 +103,7 @@ const readPollOptions = (pollStartContent: Record<string, unknown>): ForumPollOp
         id,
         label: label.trim(),
         voteCount: 0,
+        selectedByCurrentUser: false,
       };
     })
     .filter((option) => option.label.length > 0);

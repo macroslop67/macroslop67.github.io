@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import "@mdxeditor/editor/style.css";
 import "./index.css";
+import "./i18n";
 import { AppProviders } from "./app/providers";
 import { router } from "./app/router";
 

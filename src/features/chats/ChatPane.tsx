@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMatrixForum } from "../../matrix/context";
 import { type ChatMessage, type ChatRoomSummary } from "../../matrix/types";
 import { avatarInitials, compactText } from "../../shared/format";
@@ -13,6 +14,7 @@ import {
   useReactToPostMutation,
   useRedactPostMutation,
   useStartThreadFromChatMutation,
+  useVoteInPollMutation,
 } from "../threads/use-thread-mutations";
 
 const CHAT_COMPOSER_FORM_ID = "chatMessageComposer";
@@ -56,7 +58,7 @@ const mergeMessages = (existing: ChatMessage[], incoming: ChatMessage[]): ChatMe
 const getPostAnchorId = (eventId: string): string =>
   `chat-post-${eventId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
-const toErrorMessage = (error: unknown): string => {
+const toErrorMessage = (error: unknown, fallbackMessage: string): string => {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -65,7 +67,7 @@ const toErrorMessage = (error: unknown): string => {
     return error;
   }
 
-  return "Unknown error";
+  return fallbackMessage;
 };
 
 const normalizeInlineText = (value: string): string => value.trim().replace(/\s+/g, " ");
@@ -80,6 +82,7 @@ const hasRenderableBody = (body: string, attachments: ChatMessage["attachments"]
 };
 
 export function ChatPane() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { state, listChatRooms, loadChatMessages, selectSpace } = useMatrixForum();
   const postChatMessageMutation = usePostChatMessageMutation();
@@ -87,6 +90,7 @@ export function ChatPane() {
   const editMutation = useEditPostMutation();
   const reactMutation = useReactToPostMutation();
   const redactMutation = useRedactPostMutation();
+  const votePollMutation = useVoteInPollMutation();
 
   const [expanded, setExpanded] = useState(false);
   const [chatRooms, setChatRooms] = useState<ChatRoomSummary[]>([]);
@@ -164,7 +168,7 @@ export function ChatPane() {
         return;
       }
 
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage(toErrorMessage(error, t("common.unknownError")));
       setChatRooms([]);
       setSelectedRoomId(null);
     } finally {
@@ -172,7 +176,7 @@ export function ChatPane() {
         setRoomsLoading(false);
       }
     }
-  }, [listChatRooms]);
+  }, [listChatRooms, t]);
 
   const refreshMessagesForRoom = useCallback(
     async (roomId: string, options?: RefreshMessagesOptions) => {
@@ -230,7 +234,7 @@ export function ChatPane() {
           return;
         }
 
-        setErrorMessage(toErrorMessage(error));
+        setErrorMessage(toErrorMessage(error, t("common.unknownError")));
         if (replaceMessages) {
           setMessages([]);
           setHasMoreHistory(false);
@@ -242,7 +246,7 @@ export function ChatPane() {
         }
       }
     },
-    [loadChatMessages],
+    [loadChatMessages, t],
   );
 
   useEffect(() => {
@@ -357,7 +361,7 @@ export function ChatPane() {
 
   const sendMessage = async ({ markdown, attachments, poll }: ComposerPayload) => {
     if (!selectedRoomId) {
-      throw new Error("Select a room before sending chat messages.");
+      throw new Error(t("chat.pickRoom"));
     }
 
     await postChatMessageMutation.mutateAsync({
@@ -379,7 +383,7 @@ export function ChatPane() {
 
   const initializeThread = async ({ markdown, attachments, poll }: ComposerPayload) => {
     if (!selectedRoomId || !threadInitTarget) {
-      throw new Error("Pick a post to initialize a thread.");
+      throw new Error(t("matrixErrors.startThreadMissingPost"));
     }
 
     const createdThreadId = await startThreadFromChatMutation.mutateAsync({
@@ -457,13 +461,34 @@ export function ChatPane() {
       return;
     }
 
-    if (!window.confirm("Delete this message?")) {
+    if (!window.confirm(t("threadDetail.deleteConfirm"))) {
       return;
     }
 
     await redactMutation.mutateAsync({
       roomId: message.roomId,
       eventId: message.eventId,
+    });
+
+    if (selectedRoomId) {
+      await refreshMessagesForRoom(selectedRoomId, {
+        backfillPasses: 0,
+        showLoader: false,
+        pageSize: CHAT_PAGE_SIZE,
+        replaceMessages: false,
+      });
+    }
+  };
+
+  const voteInPoll = async (message: ChatMessage, answerIds: string[]) => {
+    if (!message.poll) {
+      return;
+    }
+
+    await votePollMutation.mutateAsync({
+      roomId: message.roomId,
+      pollEventId: message.eventId,
+      answerIds,
     });
 
     if (selectedRoomId) {
@@ -519,15 +544,15 @@ export function ChatPane() {
           type="button"
           className="chat-pane-toggle"
           onClick={() => setExpanded(true)}
-          aria-label="Open chat pane"
+          aria-label={t("chat.openPaneAria")}
         >
-          Chats
+          {t("chat.chats")}
           {chatRooms.length > 0 ? <span>{chatRooms.length}</span> : ""}
         </button>
       ) : null}
 
       {expanded ? (
-        <section className="chat-pane" aria-label="Chats">
+        <section className="chat-pane" aria-label={t("chat.chats")}>
           {/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/prefer-tag-over-role */}
           <header
             className="chat-pane-header"
@@ -535,7 +560,7 @@ export function ChatPane() {
             role="button"
             aria-expanded={expanded}
           >
-            <h3>Chats</h3>
+            <h3>{t("chat.chats")}</h3>
 
             <div
               className="chat-pane-header-actions"
@@ -543,20 +568,20 @@ export function ChatPane() {
               role="group"
             >
               <button type="button" className="ghost-button" onClick={refreshRooms}>
-                Refresh
+                {t("common.refresh")}
               </button>
               <button type="button" className="ghost-button" onClick={() => setExpanded(false)}>
-                Collapse
+                {t("chat.collapse")}
               </button>
             </div>
           </header>
 
           <div className="chat-pane-body">
-            <aside className="chat-room-list" aria-label="Chat rooms">
+            <aside className="chat-room-list" aria-label={t("chat.chats")}>
               {roomsLoading ? (
                 <ChatRoomListSkeleton />
               ) : chatRooms.length === 0 ? (
-                <div className="chat-empty">No joined rooms.</div>
+                <div className="chat-empty">{t("chat.noJoinedRooms")}</div>
               ) : (
                 chatRooms.map((room) => (
                   <button
@@ -577,8 +602,10 @@ export function ChatPane() {
                       <strong>{room.name}</strong>
                     </div>
                     <span className="inline-note">
-                      {room.unreadCount} unread
-                      {room.highlightCount > 0 ? ` · ${room.highlightCount} mentions` : ""}
+                      {t("count.unread", { count: room.unreadCount })}
+                      {room.highlightCount > 0
+                        ? ` · ${t("count.mention", { count: room.highlightCount })}`
+                        : ""}
                     </span>
                   </button>
                 ))
@@ -592,7 +619,8 @@ export function ChatPane() {
                     <div>
                       <h4>{selectedRoom.name}</h4>
                       <p className="inline-note">
-                        {selectedRoom.memberCount} members · last activity{" "}
+                        {t("count.member", { count: selectedRoom.memberCount })} ·{" "}
+                        {t("common.lastActivity")}{" "}
                         <RelativeTime timestamp={selectedRoom.lastActivityAt} />
                       </p>
                       {selectedRoom.topic ? (
@@ -610,7 +638,7 @@ export function ChatPane() {
 
                     {!messagesLoading && messages.length === 0 ? (
                       <article className="post-card">
-                        <p className="inline-note">No visible chat messages yet.</p>
+                        <p className="inline-note">{t("chat.noVisibleMessages")}</p>
                       </article>
                     ) : null}
 
@@ -637,6 +665,8 @@ export function ChatPane() {
                         onSaveEdit={(message) => void saveEdit(message)}
                         onEditMarkdownChange={setEditingMarkdown}
                         onReact={(message, emoji) => void reactToPost(message, emoji)}
+                        onVotePoll={(message, answerIds) => void voteInPoll(message, answerIds)}
+                        pollVoteBusy={votePollMutation.isPending}
                         onRemove={(message) =>
                           void removePost(
                             message,
@@ -647,42 +677,13 @@ export function ChatPane() {
                     ) : null}
                   </div>
 
-                  <ThreadComposer
-                    formId={CHAT_COMPOSER_FORM_ID}
-                    heading={replyTarget ? "Reply" : "Send message"}
-                    submitLabel="Send"
-                    compact
-                    busy={postChatMessageMutation.isPending}
-                    contextPreview={
-                      replyTarget ? (
-                        <div className="reply-target">
-                          <button
-                            className="link-action"
-                            type="button"
-                            onClick={() => focusParentMessage(replyTarget.eventId)}
-                          >
-                            Replying to #{postIndexByEventId.get(replyTarget.eventId) ?? "?"}{" "}
-                            {replyTarget.authorDisplayName}
-                          </button>
-
-                          <button
-                            className="link-action"
-                            type="button"
-                            onClick={() => setReplyTargetId(null)}
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      ) : null
-                    }
-                    onSubmit={sendMessage}
-                  />
-
                   {threadInitTarget ? (
                     <ThreadComposer
                       formId={THREAD_INIT_COMPOSER_FORM_ID}
-                      heading={`Start thread from #${postIndexByEventId.get(threadInitTarget.eventId) ?? "?"}`}
-                      submitLabel="Start thread"
+                      heading={t("chat.startThreadFrom", {
+                        index: postIndexByEventId.get(threadInitTarget.eventId) ?? "?",
+                      })}
+                      submitLabel={t("chat.startThread")}
                       compact
                       busy={startThreadFromChatMutation.isPending}
                       contextPreview={
@@ -692,7 +693,8 @@ export function ChatPane() {
                             type="button"
                             onClick={() => focusParentMessage(threadInitTarget.eventId)}
                           >
-                            Thread root: {compactText(threadInitTarget.body || "(no text)", 80)}
+                            {t("chat.threadRootLabel")}:{" "}
+                            {compactText(threadInitTarget.body || t("chat.noTextRoot"), 80)}
                           </button>
 
                           <button
@@ -700,16 +702,49 @@ export function ChatPane() {
                             type="button"
                             onClick={() => setThreadInitTargetId(null)}
                           >
-                            Cancel
+                            {t("common.cancel")}
                           </button>
                         </div>
                       }
                       onSubmit={initializeThread}
                     />
-                  ) : null}
+                  ) : (
+                    <ThreadComposer
+                      formId={CHAT_COMPOSER_FORM_ID}
+                      heading={replyTarget ? t("common.reply") : t("chat.sendMessage")}
+                      submitLabel={t("common.send")}
+                      compact
+                      busy={postChatMessageMutation.isPending}
+                      contextPreview={
+                        replyTarget ? (
+                          <div className="reply-target">
+                            <button
+                              className="link-action"
+                              type="button"
+                              onClick={() => focusParentMessage(replyTarget.eventId)}
+                            >
+                              {t("chat.replyingTo", {
+                                index: postIndexByEventId.get(replyTarget.eventId) ?? "?",
+                                author: replyTarget.authorDisplayName,
+                              })}
+                            </button>
+
+                            <button
+                              className="link-action"
+                              type="button"
+                              onClick={() => setReplyTargetId(null)}
+                            >
+                              {t("common.clear")}
+                            </button>
+                          </div>
+                        ) : null
+                      }
+                      onSubmit={sendMessage}
+                    />
+                  )}
                 </>
               ) : (
-                <div className="chat-empty">Pick a room to open messages.</div>
+                <div className="chat-empty">{t("chat.pickRoom")}</div>
               )}
             </section>
           </div>
@@ -741,6 +776,8 @@ type VirtualizedChatMessagesProps = {
   onSaveEdit: (message: ChatMessage) => void;
   onEditMarkdownChange: (markdown: string) => void;
   onReact: (message: ChatMessage, emoji: string) => void;
+  onVotePoll: (message: ChatMessage, answerIds: string[]) => void;
+  pollVoteBusy: boolean;
   onRemove: (message: ChatMessage) => void;
 };
 
@@ -766,8 +803,11 @@ function VirtualizedChatMessages({
   onSaveEdit,
   onEditMarkdownChange,
   onReact,
+  onVotePoll,
+  pollVoteBusy,
   onRemove,
 }: VirtualizedChatMessagesProps) {
+  const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const previousMessageCountRef = useRef(0);
@@ -946,8 +986,10 @@ function VirtualizedChatMessages({
   }, [focusEventId, messageIndexByEventId, onFocusConsumed, rowVirtualizer]);
 
   return (
-    <div ref={viewportRef} className="chat-message-viewport" aria-label="Messages">
-      {historyLoading ? <div className="chat-history-loading">Loading older messages…</div> : null}
+    <div ref={viewportRef} className="chat-message-viewport" aria-label={t("chat.messagesAria")}>
+      {historyLoading ? (
+        <div className="chat-history-loading">{t("chat.loadingOlderMessages")}</div>
+      ) : null}
       <div className="chat-message-spacer" style={{ height: rowVirtualizer.getTotalSize() }}>
         {rowVirtualizer.getVirtualItems().map((virtualItem) => {
           const message = messages[virtualItem.index];
@@ -987,6 +1029,8 @@ function VirtualizedChatMessages({
                 onSaveEdit={() => onSaveEdit(message)}
                 onEditMarkdownChange={onEditMarkdownChange}
                 onReact={(emoji) => onReact(message, emoji)}
+                onVotePoll={(answerIds) => onVotePoll(message, answerIds)}
+                pollVoteBusy={pollVoteBusy}
                 onRemove={() => onRemove(message)}
               />
             </div>
@@ -1015,6 +1059,8 @@ type ChatMessageRowProps = {
   onSaveEdit: () => void;
   onEditMarkdownChange: (markdown: string) => void;
   onReact: (emoji: string) => void;
+  onVotePoll: (answerIds: string[]) => void;
+  pollVoteBusy: boolean;
   onRemove: () => void;
 };
 
@@ -1036,8 +1082,11 @@ function ChatMessageRow({
   onSaveEdit,
   onEditMarkdownChange,
   onReact,
+  onVotePoll,
+  pollVoteBusy,
   onRemove,
 }: ChatMessageRowProps) {
+  const { t } = useTranslation();
   const anchorId = getPostAnchorId(message.eventId);
 
   const copyAnchorLink = () => {
@@ -1079,7 +1128,7 @@ function ChatMessageRow({
             <>
               <span>·</span>
               <span>
-                edited <RelativeTime timestamp={message.editedAt} />
+                {t("common.edited")} <RelativeTime timestamp={message.editedAt} />
               </span>
             </>
           ) : null}
@@ -1087,12 +1136,12 @@ function ChatMessageRow({
 
         {parentMessage ? (
           <button type="button" className="chat-reply-pill" onClick={onFocusParent}>
-            Replying to {parentMessage.authorDisplayName}: “
+            {t("threadDetail.replyingToPreview", { author: parentMessage.authorDisplayName })}: “
             {compactText(
               parentMessage.body ||
                 parentMessage.poll?.question ||
                 parentMessage.attachments[0]?.name ||
-                "(no text)",
+                t("common.noText"),
               72,
             )}
             ”
@@ -1112,13 +1161,13 @@ function ChatMessageRow({
           ) : null}
 
           <ChatMessageAttachments message={message} />
-          <ChatMessagePoll message={message} />
+          <ChatMessagePoll message={message} onVote={onVotePoll} busy={pollVoteBusy} />
           <ChatMessageReactions message={message} onReact={onReact} />
         </div>
 
         <div className="chat-message-actions">
           <button type="button" className="reply-button" onClick={onReply}>
-            Reply
+            {t("common.reply")}
           </button>
           {message.thread ? (
             <Link
@@ -1126,35 +1175,34 @@ function ChatMessageRow({
               params={{ threadId: message.thread.threadId }}
               className="reply-button"
             >
-              View thread ({message.thread.replyCount}{" "}
-              {message.thread.replyCount === 1 ? "reply" : "replies"})
+              {t("chat.viewThread")} ({t("count.reply", { count: message.thread.replyCount })})
             </Link>
           ) : (
             <button type="button" className="reply-button" onClick={onStartThread}>
-              Start thread
+              {t("chat.startThread")}
             </button>
           )}
 
           {canEdit && !isEditing ? (
             <button type="button" className="reply-button" onClick={onStartEdit}>
-              Edit
+              {t("common.edit")}
             </button>
           ) : null}
 
           {isEditing ? (
             <>
               <button type="button" className="reply-button" onClick={onSaveEdit}>
-                Save
+                {t("common.save")}
               </button>
               <button type="button" className="reply-button" onClick={onCancelEdit}>
-                Cancel
+                {t("common.cancel")}
               </button>
             </>
           ) : null}
 
           {canDelete ? (
             <button type="button" className="reply-button" onClick={onRemove}>
-              Delete
+              {t("common.delete")}
             </button>
           ) : null}
         </div>
@@ -1164,6 +1212,8 @@ function ChatMessageRow({
 }
 
 function ChatMessageAttachments({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation();
+
   if (message.attachments.length === 0) {
     return null;
   }
@@ -1191,7 +1241,7 @@ function ChatMessageAttachments({ message }: { message: ChatMessage }) {
           </a>
 
           <span className="inline-note">
-            {attachment.mimeType ?? "attachment"}
+            {attachment.mimeType ?? t("common.attachment")}
             {attachment.size ? ` · ${Math.ceil(attachment.size / 1024)} KB` : ""}
           </span>
         </div>
@@ -1200,22 +1250,92 @@ function ChatMessageAttachments({ message }: { message: ChatMessage }) {
   );
 }
 
-function ChatMessagePoll({ message }: { message: ChatMessage }) {
+function ChatMessagePoll({
+  message,
+  onVote,
+  busy,
+}: {
+  message: ChatMessage;
+  onVote: (answerIds: string[]) => void;
+  busy: boolean;
+}) {
+  const { t } = useTranslation();
+
   if (!message.poll) {
     return null;
   }
 
+  const poll = message.poll;
+
+  const selectedFromServer = useMemo(
+    () => poll.options.filter((option) => option.selectedByCurrentUser).map((option) => option.id),
+    [poll.options],
+  );
+  const selectedFromServerKey = selectedFromServer.join("|");
+
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(selectedFromServer);
+
+  useEffect(() => {
+    setSelectedOptionIds(selectedFromServer);
+  }, [message.eventId, selectedFromServer, selectedFromServerKey]);
+
+  const toggleOption = (optionId: string) => {
+    setSelectedOptionIds((previousOptionIds) => {
+      const alreadySelected = previousOptionIds.includes(optionId);
+      if (alreadySelected) {
+        return previousOptionIds.filter((id) => id !== optionId);
+      }
+
+      if (previousOptionIds.length >= poll.maxSelections) {
+        if (poll.maxSelections === 1) {
+          return [optionId];
+        }
+
+        return previousOptionIds;
+      }
+
+      return [...previousOptionIds, optionId];
+    });
+  };
+
+  const submitVote = () => {
+    if (selectedOptionIds.length === 0 || busy) {
+      return;
+    }
+
+    onVote(selectedOptionIds);
+  };
+
   return (
     <section className="post-poll">
-      <h4>{message.poll.question}</h4>
+      <h4>{poll.question}</h4>
       <ul>
-        {message.poll.options.map((option) => (
+        {poll.options.map((option) => (
           <li key={`${message.eventId}-${option.id}`}>
-            <span>{option.label}</span>
-            <span className="inline-note">{option.voteCount} vote(s)</span>
+            <button
+              type="button"
+              className={`reply-button ${selectedOptionIds.includes(option.id) ? "reaction-chip-active" : ""}`}
+              onClick={() => toggleOption(option.id)}
+            >
+              {option.label}
+            </button>
+            <span className="inline-note">{t("count.vote", { count: option.voteCount })}</span>
           </li>
         ))}
       </ul>
+      <div className="chat-message-actions">
+        <span className="inline-note">
+          {t("poll.maxSelections", { count: poll.maxSelections })}
+        </span>
+        <button
+          type="button"
+          className="reply-button"
+          onClick={submitVote}
+          disabled={busy || selectedOptionIds.length === 0}
+        >
+          {busy ? t("poll.votingAction") : t("poll.voteAction")}
+        </button>
+      </div>
     </section>
   );
 }
@@ -1227,6 +1347,7 @@ function ChatMessageReactions({
   message: ChatMessage;
   onReact: (emoji: string) => void;
 }) {
+  const { t } = useTranslation();
   const usedReactions = new Set(message.reactions.map((reaction) => reaction.key));
   const quickReactions = DEFAULT_REACTION_EMOJIS.filter((emoji) => !usedReactions.has(emoji));
 
@@ -1242,7 +1363,9 @@ function ChatMessageReactions({
           type="button"
           className={`reaction-chip ${reaction.reactedByCurrentUser ? "reaction-chip-active" : ""}`}
           onClick={() => onReact(reaction.key)}
-          title={reaction.reactedByCurrentUser ? "Remove reaction" : "Add reaction"}
+          title={
+            reaction.reactedByCurrentUser ? t("common.removeReaction") : t("common.addReaction")
+          }
         >
           {reaction.key} <span>{reaction.count}</span>
         </button>
@@ -1254,7 +1377,7 @@ function ChatMessageReactions({
           type="button"
           className="reaction-chip reaction-chip-add"
           onClick={() => onReact(emoji)}
-          title="Add reaction"
+          title={t("common.addReaction")}
         >
           {emoji}
         </button>
@@ -1264,8 +1387,10 @@ function ChatMessageReactions({
 }
 
 function ChatRoomListSkeleton() {
+  const { t } = useTranslation();
+
   return (
-    <div className="chat-room-skeleton-list" aria-label="Loading rooms">
+    <div className="chat-room-skeleton-list" aria-label={t("chat.loadingRoomsAria")}>
       {Array.from({ length: 6 }).map((_, index) => (
         <div key={`chat-room-skeleton-${index}`} className="chat-room-skeleton-item">
           <div className="chat-room-skeleton-heading">
@@ -1280,8 +1405,10 @@ function ChatRoomListSkeleton() {
 }
 
 function ChatMessageListSkeleton() {
+  const { t } = useTranslation();
+
   return (
-    <div className="chat-message-skeleton-list" aria-label="Loading messages">
+    <div className="chat-message-skeleton-list" aria-label={t("chat.loadingMessagesAria")}>
       {Array.from({ length: 7 }).map((_, index) => (
         <div
           key={`chat-message-skeleton-${index}`}

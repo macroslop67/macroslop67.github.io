@@ -94,6 +94,23 @@ type PollResponse = {
   answerIds: string[];
 };
 
+type PollVoteRecord = {
+  answerIds: string[];
+  createdAt: number;
+};
+
+type RelationsEndpointEvent = {
+  event_id?: string;
+  sender?: string;
+  content?: MatrixContent;
+  unsigned?: MatrixContent;
+};
+
+type RelationsEndpointResponse = {
+  chunk?: RelationsEndpointEvent[];
+  next_batch?: string;
+};
+
 type EditPayload = {
   body: string | null;
   editedAt: number;
@@ -101,6 +118,8 @@ type EditPayload = {
 
 const THREADS_PAGE_LIMIT = 50;
 const THREADS_MAX_PAGES = 200;
+const RELATIONS_PAGE_LIMIT = 200;
+const RELATIONS_MAX_PAGES = 120;
 const CHAT_INITIAL_BACKFILL_PASSES = 2;
 const CHAT_BACKFILL_LIMIT = 200;
 
@@ -279,6 +298,7 @@ const readPollOptions = (pollStartContent: Record<string, unknown>) => {
         id,
         label: label.trim(),
         voteCount: 0,
+        selectedByCurrentUser: false,
       };
     })
     .filter((option) => option.label.length > 0);
@@ -440,8 +460,9 @@ const canModerateRoom = (room: Room): boolean => {
 const applyPollVotes = (
   poll: ForumPoll | null,
   votesByOptionId: Map<string, Set<string>> | undefined,
+  myUserId: string,
 ): ForumPoll | null => {
-  if (!poll || !votesByOptionId) {
+  if (!poll) {
     return poll;
   }
 
@@ -449,9 +470,32 @@ const applyPollVotes = (
     ...poll,
     options: poll.options.map((option) => ({
       ...option,
-      voteCount: votesByOptionId.get(option.id)?.size ?? 0,
+      voteCount: votesByOptionId?.get(option.id)?.size ?? 0,
+      selectedByCurrentUser: votesByOptionId?.get(option.id)?.has(myUserId) ?? false,
     })),
   };
+};
+
+const buildPollVotesByTargetEventId = (
+  latestVotesByTargetAndSender: Map<string, Map<string, PollVoteRecord>>,
+): Map<string, Map<string, Set<string>>> => {
+  const votesByTargetEventId = new Map<string, Map<string, Set<string>>>();
+
+  for (const [targetEventId, latestVotesBySender] of latestVotesByTargetAndSender.entries()) {
+    const votesByOptionId = new Map<string, Set<string>>();
+
+    for (const [senderId, voteRecord] of latestVotesBySender.entries()) {
+      for (const answerId of new Set(voteRecord.answerIds)) {
+        const senders = votesByOptionId.get(answerId) ?? new Set<string>();
+        senders.add(senderId);
+        votesByOptionId.set(answerId, senders);
+      }
+    }
+
+    votesByTargetEventId.set(targetEventId, votesByOptionId);
+  }
+
+  return votesByTargetEventId;
 };
 
 const applyReactions = <T extends { eventId: string; reactions: ChatMessage["reactions"] }>(
@@ -841,6 +885,40 @@ export class MatrixForumStore {
     return rootEventIdTrimmed;
   };
 
+  voteInPoll = async (roomId: string, pollEventId: string, answerIds: string[]): Promise<void> => {
+    const client = this.getConnectedClient();
+    const normalizedPollEventId = pollEventId.trim();
+    const normalizedAnswerIds = answerIds.map((answerId) => answerId.trim()).filter(Boolean);
+
+    if (!normalizedPollEventId) {
+      throw new Error("Poll event ID is required.");
+    }
+
+    if (normalizedAnswerIds.length === 0) {
+      throw new Error("Select at least one poll option.");
+    }
+
+    await client.sendEvent(
+      roomId,
+      POLL_RESPONSE_EVENT_TYPE_UNSTABLE as never,
+      {
+        msgtype: "m.poll.response",
+        [POLL_RESPONSE_EVENT_TYPE_UNSTABLE]: {
+          answers: [...new Set(normalizedAnswerIds)],
+        },
+        [POLL_RESPONSE_EVENT_TYPE]: {
+          answers: [...new Set(normalizedAnswerIds)],
+        },
+        "m.relates_to": {
+          rel_type: "m.reference",
+          event_id: normalizedPollEventId,
+        },
+      } as never,
+    );
+
+    this.scheduleRefresh(40);
+  };
+
   editPost = async (roomId: string, eventId: string, markdown: string): Promise<void> => {
     const client = this.getConnectedClient();
     const body = markdown.trim();
@@ -889,7 +967,14 @@ export class MatrixForumStore {
       throw new Error("Room not available in your joined rooms.");
     }
 
-    const existingReactionEventId = this.findOwnReactionEventId(room, eventId, key);
+    const myUserId = this.state.config?.userId ?? room.myUserId;
+
+    const existingReactionEventId =
+      this.findOwnReactionEventId(room, eventId, key) ??
+      (myUserId
+        ? await this.findOwnReactionEventIdFromRelations(roomId, eventId, key, myUserId)
+        : null);
+
     if (existingReactionEventId) {
       await client.redactEvent(roomId, existingReactionEventId, undefined, {
         reason: "Removed reaction",
@@ -909,6 +994,86 @@ export class MatrixForumStore {
     await client.sendEvent(roomId, REACTION_EVENT_TYPE as never, content as never);
     this.scheduleRefresh(40);
   };
+
+  private async findOwnReactionEventIdFromRelations(
+    roomId: string,
+    targetEventId: string,
+    emoji: string,
+    myUserId: string,
+  ): Promise<string | null> {
+    const config = this.state.config;
+    if (!config) {
+      return null;
+    }
+
+    const visitedPaginationTokens = new Set<string>();
+    let from: string | null = null;
+
+    for (let page = 0; page < RELATIONS_MAX_PAGES; page += 1) {
+      if (from && visitedPaginationTokens.has(from)) {
+        break;
+      }
+
+      const endpoint = new URL(
+        `${config.homeserverUrl}/_matrix/client/v1/rooms/${encodeURIComponent(
+          roomId,
+        )}/relations/${encodeURIComponent(targetEventId)}/${encodeURIComponent(
+          ANNOTATION_RELATION_TYPE,
+        )}/${encodeURIComponent(REACTION_EVENT_TYPE)}`,
+      );
+      endpoint.searchParams.set("dir", "b");
+      endpoint.searchParams.set("limit", String(RELATIONS_PAGE_LIMIT));
+
+      if (from) {
+        visitedPaginationTokens.add(from);
+        endpoint.searchParams.set("from", from);
+      }
+
+      const response = await fetch(endpoint.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${config.accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        break;
+      }
+
+      const body = (await response.json()) as RelationsEndpointResponse;
+      for (const event of body.chunk ?? []) {
+        if (event.sender !== myUserId) {
+          continue;
+        }
+
+        if (asRecord(event.unsigned)?.redacted_because) {
+          continue;
+        }
+
+        const annotation = readAnnotationRelation(asRecord(event.content) ?? {});
+        if (!annotation) {
+          continue;
+        }
+
+        if (annotation.targetEventId !== targetEventId || annotation.key !== emoji) {
+          continue;
+        }
+
+        const reactionEventId = asString(event.event_id);
+        if (reactionEventId) {
+          return reactionEventId;
+        }
+      }
+
+      from = asString(body.next_batch);
+      if (!from) {
+        break;
+      }
+    }
+
+    return null;
+  }
 
   private findOwnReactionEventId(room: Room, targetEventId: string, emoji: string): string | null {
     const myUserId = this.state.config?.userId ?? room.myUserId;
@@ -1322,7 +1487,7 @@ export class MatrixForumStore {
     const messagesByEventId = new Map<string, ChatMessage>();
     const editsByTargetEventId = new Map<string, EditPayload>();
     const reactionsByEventId = new Map<string, Map<string, Set<string>>>();
-    const pollVotesByTargetEventId = new Map<string, Map<string, Set<string>>>();
+    const latestPollVotesByTargetAndSender = new Map<string, Map<string, PollVoteRecord>>();
     const threadSummaryByRootEventId = new Map<string, { threadId: string; replyCount: number }>();
 
     for (const sdkThread of room.getThreads()) {
@@ -1360,17 +1525,28 @@ export class MatrixForumStore {
       reactionsByEventId.set(targetEventId, reactionsForEvent);
     };
 
-    const addPollVote = (targetEventId: string, answerId: string, senderId: string | undefined) => {
+    const addPollVote = (
+      targetEventId: string,
+      answerIds: string[],
+      senderId: string | undefined,
+      createdAt: number,
+    ) => {
       if (!senderId) {
         return;
       }
 
-      const votesForPoll =
-        pollVotesByTargetEventId.get(targetEventId) ?? new Map<string, Set<string>>();
-      const votesForOption = votesForPoll.get(answerId) ?? new Set<string>();
-      votesForOption.add(senderId);
-      votesForPoll.set(answerId, votesForOption);
-      pollVotesByTargetEventId.set(targetEventId, votesForPoll);
+      const votesBySender =
+        latestPollVotesByTargetAndSender.get(targetEventId) ?? new Map<string, PollVoteRecord>();
+      const existingVote = votesBySender.get(senderId);
+      if (existingVote && existingVote.createdAt > createdAt) {
+        return;
+      }
+
+      votesBySender.set(senderId, {
+        answerIds: answerIds.map((answerId) => answerId.trim()).filter(Boolean),
+        createdAt,
+      });
+      latestPollVotesByTargetAndSender.set(targetEventId, votesBySender);
     };
 
     const addEdit = (targetEventId: string, body: string | null, editedAt: number) => {
@@ -1405,9 +1581,12 @@ export class MatrixForumStore {
       if (isPollResponseType(eventType)) {
         const pollResponse = readPollResponse(content);
         if (pollResponse) {
-          for (const answerId of pollResponse.answerIds) {
-            addPollVote(pollResponse.targetEventId, answerId, event.getSender());
-          }
+          addPollVote(
+            pollResponse.targetEventId,
+            pollResponse.answerIds,
+            event.getSender(),
+            event.getTs(),
+          );
         }
 
         continue;
@@ -1482,11 +1661,18 @@ export class MatrixForumStore {
     }
 
     const myUserId = room.myUserId;
+    const pollVotesByTargetEventId = buildPollVotesByTargetEventId(
+      latestPollVotesByTargetAndSender,
+    );
 
     return [...messagesByEventId.values()]
       .map((message) => ({
         ...message,
-        poll: applyPollVotes(message.poll, pollVotesByTargetEventId.get(message.eventId)),
+        poll: applyPollVotes(
+          message.poll,
+          pollVotesByTargetEventId.get(message.eventId),
+          myUserId ?? "@unknown:local",
+        ),
       }))
       .filter((message) => message.body || message.attachments.length > 0 || message.poll)
       .map((message) => applyReactions(message, myUserId ?? "@unknown:local", reactionsByEventId))

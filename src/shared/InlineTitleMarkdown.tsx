@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 
 type InlineTitleMarkdownProps = {
   title: string;
@@ -15,12 +16,10 @@ const sanitizeInlineTitle = (rawTitle: string): string => {
   return withoutBackticks.replace(/\s+/g, " ").trim();
 };
 
-export function InlineTitleMarkdown({
-  title,
-  className,
-  fallback = "Untitled",
-}: InlineTitleMarkdownProps) {
+export function InlineTitleMarkdown({ title, className, fallback }: InlineTitleMarkdownProps) {
+  const { t } = useTranslation();
   const normalizedTitle = sanitizeInlineTitle(title);
+  const fallbackTitle = fallback ?? t("common.untitled");
 
   return (
     <span className={className}>
@@ -54,7 +53,7 @@ export function InlineTitleMarkdown({
           p: ({ children }) => <>{children}</>,
         }}
       >
-        {normalizedTitle || fallback}
+        {normalizedTitle || fallbackTitle}
       </ReactMarkdown>
     </span>
   );

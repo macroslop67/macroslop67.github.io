@@ -40,6 +40,7 @@ export interface ForumPollOption {
   id: string;
   label: string;
   voteCount: number;
+  selectedByCurrentUser: boolean;
 }
 
 export interface ForumPoll {
@@ -143,6 +144,12 @@ export interface StartThreadFromChatPayload {
   markdown: string;
   attachments: File[];
   poll: PollDraft | null;
+}
+
+export interface VoteInPollPayload {
+  roomId: string;
+  pollEventId: string;
+  answerIds: string[];
 }
 
 export interface ForumSnapshot {

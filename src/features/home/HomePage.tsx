@@ -1,10 +1,12 @@
 import { Link, Navigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { useMatrixForum } from "../../matrix/context";
 import { compactText, shortUserId } from "../../shared/format";
 import { InlineTitleMarkdown } from "../../shared/InlineTitleMarkdown";
 import { RelativeTime } from "../../shared/RelativeTime";
 
 export function HomePage() {
+  const { t } = useTranslation();
   const { state, refresh, selectSpace } = useMatrixForum();
 
   if (!state.config) {
@@ -31,7 +33,7 @@ export function HomePage() {
     <section className="home-page">
       <header className="home-toolbar">
         <div>
-          <h2 className="home-title">Forum Index</h2>
+          <h2 className="home-title">{t("homePage.title")}</h2>
           <p className="subtle-line home-scope-indicator">
             {selectedSpace?.avatarUrl ? (
               <img
@@ -42,21 +44,23 @@ export function HomePage() {
               />
             ) : null}
             {selectedSpace
-              ? `Current space: ${selectedSpace.name} · ${selectedSpace.unreadCount} unread${
+              ? `${t("homePage.currentSpace", { name: selectedSpace.name })} · ${t("count.unread", {
+                  count: selectedSpace.unreadCount,
+                })}${
                   selectedSpace.highlightCount > 0
-                    ? ` · ${selectedSpace.highlightCount} mentions`
+                    ? ` · ${t("count.mention", { count: selectedSpace.highlightCount })}`
                     : ""
                 }`
               : spaces.length > 0
-                ? "Current scope: all joined rooms."
-                : "No joined spaces found yet. Join at least one space to continue."}
+                ? t("homePage.currentScopeAll")
+                : t("homePage.noJoinedSpaces")}
           </p>
         </div>
 
         <div className="home-toolbar-actions">
           <div className="space-selector-wrap">
             <label className="space-selector-label" htmlFor="homeSpaceSelector">
-              Space
+              {t("homePage.spaceLabel")}
             </label>
             <select
               id="homeSpaceSelector"
@@ -65,8 +69,12 @@ export function HomePage() {
               onChange={(event) => selectSpace(event.target.value || null)}
               disabled={spaces.length === 0}
             >
-              {spaces.length === 0 ? <option value="">No joined spaces</option> : null}
-              {spaces.length > 0 ? <option value="">All joined rooms</option> : null}
+              {spaces.length === 0 ? (
+                <option value="">{t("homePage.noJoinedSpacesOption")}</option>
+              ) : null}
+              {spaces.length > 0 ? (
+                <option value="">{t("homePage.allJoinedRoomsOption")}</option>
+              ) : null}
               {spaces.map((space) => (
                 <option key={space.id} value={space.id}>
                   {space.name}
@@ -76,7 +84,7 @@ export function HomePage() {
           </div>
 
           <button type="button" className="ghost-button" onClick={() => void refresh()}>
-            Refresh
+            {t("common.refresh")}
           </button>
         </div>
       </header>
@@ -88,8 +96,8 @@ export function HomePage() {
       <div className="home-layout">
         <section className="group-index-card">
           <header className="card-heading-row">
-            <h3>Groups</h3>
-            <span className="inline-note">{groups.length} total</span>
+            <h3>{t("homePage.groupsTitle")}</h3>
+            <span className="inline-note">{t("count.total", { count: groups.length })}</span>
           </header>
 
           {groups.length > 0 ? (
@@ -118,8 +126,11 @@ export function HomePage() {
                         </Link>
                       </div>
                       <span className="inline-note">
-                        {group.memberCount} members · {group.unreadCount} unread
-                        {group.highlightCount > 0 ? ` · ${group.highlightCount} mentions` : ""}
+                        {t("count.member", { count: group.memberCount })} ·{" "}
+                        {t("count.unread", { count: group.unreadCount })}
+                        {group.highlightCount > 0
+                          ? ` · ${t("count.mention", { count: group.highlightCount })}`
+                          : ""}
                       </span>
                     </div>
 
@@ -146,7 +157,7 @@ export function HomePage() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="inline-note">No visible threads yet in this group.</p>
+                      <p className="inline-note">{t("homePage.noVisibleThreadsInGroup")}</p>
                     )}
                   </article>
                 );
@@ -156,15 +167,17 @@ export function HomePage() {
             <SkeletonGroupRows />
           ) : (
             <article className="post-card">
-              <p className="inline-note">No groups found for the currently selected space.</p>
+              <p className="inline-note">{t("homePage.noGroupsInScope")}</p>
             </article>
           )}
         </section>
 
         <section className="recent-activity-card">
           <header className="card-heading-row">
-            <h3>Recently Active Topics</h3>
-            <span className="inline-note">Latest {Math.min(threads.length, 16)}</span>
+            <h3>{t("homePage.recentTopicsTitle")}</h3>
+            <span className="inline-note">
+              {t("homePage.latestN", { count: Math.min(threads.length, 16) })}
+            </span>
           </header>
 
           {threads.length > 0 ? (
@@ -186,7 +199,7 @@ export function HomePage() {
                     >
                       #{thread.groupName}
                     </Link>
-                    <span>{thread.replyCount} replies</span>
+                    <span>{t("count.reply", { count: thread.replyCount })}</span>
                     <span>
                       <RelativeTime timestamp={thread.lastActivityAt} />
                     </span>
@@ -198,7 +211,7 @@ export function HomePage() {
             <SkeletonRecentRows />
           ) : (
             <article className="post-card">
-              <p className="inline-note">No thread activity visible yet.</p>
+              <p className="inline-note">{t("homePage.noThreadActivity")}</p>
             </article>
           )}
         </section>

@@ -81,6 +81,11 @@ interface PollResponse {
   answerIds: string[];
 }
 
+interface PollVoteRecord {
+  answerIds: string[];
+  createdAt: number;
+}
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "object" || value === null) {
     return null;
@@ -206,6 +211,7 @@ const readPollOptions = (pollStartContent: Record<string, unknown>) => {
         id,
         label: label.trim(),
         voteCount: 0,
+        selectedByCurrentUser: false,
       };
     })
     .filter((option) => option.label.length > 0);
@@ -360,8 +366,9 @@ const isPostEvent = (event: MatrixEvent): boolean => {
 const applyPollVotes = (
   poll: ForumPoll | null,
   votesByOptionId: Map<string, Set<string>> | undefined,
+  myUserId: string,
 ): ForumPoll | null => {
-  if (!poll || !votesByOptionId) {
+  if (!poll) {
     return poll;
   }
 
@@ -369,9 +376,32 @@ const applyPollVotes = (
     ...poll,
     options: poll.options.map((option) => ({
       ...option,
-      voteCount: votesByOptionId.get(option.id)?.size ?? 0,
+      voteCount: votesByOptionId?.get(option.id)?.size ?? 0,
+      selectedByCurrentUser: votesByOptionId?.get(option.id)?.has(myUserId) ?? false,
     })),
   };
+};
+
+const buildPollVotesByTargetEventId = (
+  latestVotesByTargetAndSender: Map<string, Map<string, PollVoteRecord>>,
+): Map<string, Map<string, Set<string>>> => {
+  const votesByTargetEventId = new Map<string, Map<string, Set<string>>>();
+
+  for (const [targetEventId, latestVotesBySender] of latestVotesByTargetAndSender.entries()) {
+    const votesByOptionId = new Map<string, Set<string>>();
+
+    for (const [senderId, voteRecord] of latestVotesBySender.entries()) {
+      for (const answerId of new Set(voteRecord.answerIds)) {
+        const senders = votesByOptionId.get(answerId) ?? new Set<string>();
+        senders.add(senderId);
+        votesByOptionId.set(answerId, senders);
+      }
+    }
+
+    votesByTargetEventId.set(targetEventId, votesByOptionId);
+  }
+
+  return votesByTargetEventId;
 };
 
 const toForumPost = (event: MatrixEvent, room: Room): ForumPost | null => {
@@ -528,7 +558,7 @@ const toThreadReply = (
     ...post,
     body: editPayload?.body ?? post.body,
     editedAt: editPayload?.editedAt ?? null,
-    poll: applyPollVotes(post.poll, pollVotesByTargetEventId.get(eventId)),
+    poll: applyPollVotes(post.poll, pollVotesByTargetEventId.get(eventId), room.myUserId),
   };
 
   if (!mergedPost.body && mergedPost.attachments.length === 0 && !mergedPost.poll) {
@@ -656,7 +686,7 @@ export const buildThreadsForRoom = (
   const repliesByRootId = new Map<string, MatrixEvent[]>();
   const reactionsByEventId = new Map<string, Map<string, Set<string>>>();
   const editsByTargetEventId = new Map<string, EditPayload>();
-  const pollVotesByTargetEventId = new Map<string, Map<string, Set<string>>>();
+  const latestPollVotesByTargetAndSender = new Map<string, Map<string, PollVoteRecord>>();
 
   const addReaction = (targetEventId: string, key: string, senderId: string | undefined) => {
     if (!senderId) {
@@ -671,17 +701,28 @@ export const buildThreadsForRoom = (
     reactionsByEventId.set(targetEventId, reactionsForEvent);
   };
 
-  const addPollVote = (targetEventId: string, answerId: string, senderId: string | undefined) => {
+  const addPollVote = (
+    targetEventId: string,
+    answerIds: string[],
+    senderId: string | undefined,
+    createdAt: number,
+  ) => {
     if (!senderId) {
       return;
     }
 
-    const votesForPoll =
-      pollVotesByTargetEventId.get(targetEventId) ?? new Map<string, Set<string>>();
-    const votesForOption = votesForPoll.get(answerId) ?? new Set<string>();
-    votesForOption.add(senderId);
-    votesForPoll.set(answerId, votesForOption);
-    pollVotesByTargetEventId.set(targetEventId, votesForPoll);
+    const votesBySender =
+      latestPollVotesByTargetAndSender.get(targetEventId) ?? new Map<string, PollVoteRecord>();
+    const existingVote = votesBySender.get(senderId);
+    if (existingVote && existingVote.createdAt > createdAt) {
+      return;
+    }
+
+    votesBySender.set(senderId, {
+      answerIds: answerIds.map((answerId) => answerId.trim()).filter(Boolean),
+      createdAt,
+    });
+    latestPollVotesByTargetAndSender.set(targetEventId, votesBySender);
   };
 
   const addEdit = (targetEventId: string, body: string | null, editedAt: number) => {
@@ -709,9 +750,12 @@ export const buildThreadsForRoom = (
     if (!event.isRedacted() && isPollResponseType(event.getType())) {
       const pollResponse = readPollResponse(event.getContent<MatrixContent>());
       if (pollResponse) {
-        for (const answerId of pollResponse.answerIds) {
-          addPollVote(pollResponse.targetEventId, answerId, event.getSender());
-        }
+        addPollVote(
+          pollResponse.targetEventId,
+          pollResponse.answerIds,
+          event.getSender(),
+          event.getTs(),
+        );
       }
 
       continue;
@@ -774,9 +818,12 @@ export const buildThreadsForRoom = (
       if (!sdkThreadEvent.isRedacted() && isPollResponseType(sdkThreadEvent.getType())) {
         const pollResponse = readPollResponse(sdkThreadEvent.getContent<MatrixContent>());
         if (pollResponse) {
-          for (const answerId of pollResponse.answerIds) {
-            addPollVote(pollResponse.targetEventId, answerId, sdkThreadEvent.getSender());
-          }
+          addPollVote(
+            pollResponse.targetEventId,
+            pollResponse.answerIds,
+            sdkThreadEvent.getSender(),
+            sdkThreadEvent.getTs(),
+          );
         }
 
         continue;
@@ -829,6 +876,7 @@ export const buildThreadsForRoom = (
   }
 
   const groupName = room.name.trim() || room.roomId;
+  const pollVotesByTargetEventId = buildPollVotesByTargetEventId(latestPollVotesByTargetAndSender);
   const threads: ForumThread[] = [];
   const allThreadRootIds = allowedRootEventIds
     ? new Set<string>(allowedRootEventIds)
@@ -855,7 +903,7 @@ export const buildThreadsForRoom = (
       ...root,
       body: rootEdit?.body ?? root.body,
       editedAt: rootEdit?.editedAt ?? null,
-      poll: applyPollVotes(root.poll, pollVotesByTargetEventId.get(root.eventId)),
+      poll: applyPollVotes(root.poll, pollVotesByTargetEventId.get(root.eventId), room.myUserId),
     };
 
     if (!rootWithEdits.body && rootWithEdits.attachments.length === 0 && !rootWithEdits.poll) {

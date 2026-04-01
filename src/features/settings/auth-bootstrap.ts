@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { i18n } from "../../i18n";
 
 const loginFlowSchema = z.object({
   type: z.string(),
@@ -72,7 +73,7 @@ const fetchLoginFlows = async (
 
     const parsedBody = loginFlowsResponseSchema.safeParse(await response.json());
     if (!parsedBody.success) {
-      throw new Error("Homeserver returned an invalid login flows response.");
+      throw new Error(i18n.t("settings.invalidLoginFlows"));
     }
 
     return {
@@ -105,20 +106,20 @@ export const acquireTokenWithPassword = async (
   const password = request.password;
 
   if (!homeserverUrl) {
-    throw new Error("Homeserver URL is required before acquiring a token.");
+    throw new Error(i18n.t("settings.homeserverRequired"));
   }
 
   if (!user) {
-    throw new Error("Login user is required.");
+    throw new Error(i18n.t("settings.userRequired"));
   }
 
   if (!password) {
-    throw new Error("Password is required.");
+    throw new Error(i18n.t("settings.passwordRequired"));
   }
 
   const { clientVersion, flowTypes } = await fetchLoginFlows(homeserverUrl);
   if (!flowTypes.includes("m.login.password")) {
-    throw new Error("Homeserver does not advertise m.login.password login support.");
+    throw new Error(i18n.t("settings.noPasswordFlow"));
   }
 
   const response = await fetch(buildLoginEndpoint(homeserverUrl, clientVersion), {
@@ -144,7 +145,7 @@ export const acquireTokenWithPassword = async (
 
   const parsedBody = loginSuccessResponseSchema.safeParse(await response.json());
   if (!parsedBody.success) {
-    throw new Error("Homeserver returned an invalid login response.");
+    throw new Error(i18n.t("settings.invalidLoginResponse"));
   }
 
   return {
